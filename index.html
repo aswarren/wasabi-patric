@@ -1,0 +1,43 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+	<meta http-equiv="content-script-type" content="text/javascript" />
+	<title>Alignment viewer</title>
+	<link href="style.css" rel="stylesheet" type="text/css" media="screen" />
+	<script type="text/javascript" src="js/jquery-1.7.1.js"></script>
+	<script type="text/javascript" src="js/jquery-ui-1.8.16.js"></script>
+	<script type="text/javascript" src="js/jquery.easing.1.3.js"></script>
+	<script type="text/javascript" src="js/jquery.mousewheel.min.js"></script>
+	<script type="text/javascript" src="js/knockout-2.0.0.js"></script>
+	<script type="text/javascript" src="js/mCustomScrollbar.js"></script>
+</head>
+<body>
+  <div id="page">
+	<div id="top">
+	  <div style="position:absolute;top:20px;left:30%">
+	    <div style="display:inline-block;position:relative;margin-right:20px;">
+	      <a id="zoomout" href="#" onclick="zoomout();return false;" class="button zoom">-</a> <a id="zoomin" href="#" onclick="zoomin();return false;" class="button zoom">+</a>
+	      <div style="position:absolute;top:45px;width:100%;" class="toptext">Zoom</div>
+	    </div>
+	    <a id="undo" href="#" class="button undo">undo</a> <a id="history" href="#" onclick="return false;" class="button">history</a> <a id="redo" href="#" class="button redo">redo</a>
+	  </div>
+	</div>
+	<div id="left"><img id="leftborder" src="img/border_left.png"><div id="borderDrag">&#x2999;</div></div>
+	<div id="right">
+	  <img id="leftshadow" src="img/shadow_left.png">
+	  <div id="seqwindow">
+	    <div id="wrap">
+	      <div id="ruler"></div>
+	      <div id="seqwrap"><div id="seq"></div></div>
+	    </div>
+	  </div>
+	  <img id="rightshadow" src="img/shadow_right.png">
+	  <div id="horizontalDragger"><div class="scrollBtn scrollLeftBtn">&lt;</div><div class="dragger"></div><div class="scrollBtn scrollRightBtn">&gt;</div></div>
+	  <div id="verticalDragger"><div class="scrollBtn scrollUpBtn">&#x2227;</div><div class="dragger"></div><div class="scrollBtn scrollDownBtn">&#x2228;</div></div>
+	</div>
+	<div id="bottom"></div>
+  </div>
+<script type="text/javascript" src="js/script.js"></script>
+</body>
+</html>
