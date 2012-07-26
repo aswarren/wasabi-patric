@@ -4,39 +4,95 @@
 	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
 	<meta http-equiv="content-script-type" content="text/javascript" />
 	<title>Alignment viewer</title>
+	<link rel="shortcut icon" href="img/icon.png" />
+	<link rel="apple-touch-icon" href="img/icon_big.png" />
 	<link href="style.css" rel="stylesheet" type="text/css" media="screen" />
-	<script type="text/javascript" src="js/jquery-1.7.1.js"></script>
-	<script type="text/javascript" src="js/jquery-ui-1.8.16.js"></script>
-	<script type="text/javascript" src="js/jquery.easing.1.3.js"></script>
-	<script type="text/javascript" src="js/jquery.mousewheel.min.js"></script>
-	<script type="text/javascript" src="js/knockout-2.0.0.js"></script>
+	<script type="text/javascript" src="js/jquery.js"></script>
+	<script type="text/javascript" src="js/jquery.ui.js"></script>
+	<script type="text/javascript" src="js/jquery.easing.js"></script>
+	<script type="text/javascript" src="js/jquery.mousewheel.js"></script>
+	<script type="text/javascript" src="js/knockout.js"></script>
+	<script type="text/javascript" src="js/knockout.mapping.js"></script>
 	<script type="text/javascript" src="js/mCustomScrollbar.js"></script>
+	<script type="text/javascript" src="js/raphael.js"></script>
+	<script type="text/javascript" src="js/jsphylosvg.js"></script>
 </head>
 <body>
   <div id="page">
 	<div id="top">
+	
+	  <div style="position:absolute;top:20px;left:5%">
+	     <div style="display:inline-block;position:relative;margin-left:10px;">
+	  		<a id="file" class="button file" onclick="togglemenu('filemenu')"><img src="img/file.png" class="before smaller"> File</a>
+	      	<div id="filewrap" class="buttonmenuwrap" style="top:52px">
+	      		<div class="menuborder"></div>
+	      		<div id="filemenu" class="buttonmenu"><ul data-bind="foreach:filemenu"><li data-bind="click:$parent.fileclick"><span data-bind="html:$data+' <img src=\'img/'+$data+'.png\'>'"></span></li></ul></div>
+	      		<div class="topshadow"></div>
+	        </div>
+	   	  </div>
+	   </div>
+	   
+	   <div style="position:absolute;top:20px;left:15%">
+	     <div style="display:inline-block;position:relative;margin-left:10px;">
+	  		<a id="run" class="button run" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before"> Analyses</a>
+	      	<div id="runwrap" class="buttonmenuwrap" style="top:52px">
+	      		<div class="menuborder"></div>
+	      		<div id="runmenu" class="buttonmenu"><ul data-bind="foreach:runmenu"><li data-bind="click:$parent.runclick"><span data-bind="text:n"></span></li></ul></div>
+	      		<div class="topshadow"></div>
+	        </div>
+	   	  </div>
+	   </div>
+	   
 	  <div style="position:absolute;top:20px;left:30%">
-	    <div style="display:inline-block;position:relative;margin-right:20px;">
-	      <a id="zoomout" href="#" onclick="zoomout();return false;" class="button zoom">-</a> <a id="zoomin" href="#" onclick="zoomin();return false;" class="button zoom">+</a>
-	      <div style="position:absolute;top:45px;width:100%;" class="toptext">Zoom</div>
+	    <div id="zoombtns" style="display:inline-block;position:relative;margin-right:20px;">
+	      <a id="zoomout" onclick="zoomout();" class="button zoom">-</a> <a id="zoomin" onclick="zoomin();" class="button zoom">+</a>
+	      <div id="zoomperc" style="top:-10px;font-weight:bold;display:none" class="toptext" data-bind="text:zoomperc"></div>
+	      <div class="toptext">Zoom</div>
 	    </div>
-	    <a id="undo" href="#" class="button undo">undo</a> <a id="history" href="#" onclick="return false;" class="button">history</a> <a id="redo" href="#" class="button redo">redo</a>
+	    <a id="historybtn" class="button undo redo"><img src="img/undo.png" class="before" style="vertical-align:6px"> history <img src="img/redo.png" class="after"></a>
+	    <!-- <a id="historybtn" class="button undo redo"><span class="before" style="vertical-align:6px">&#x27F2;</span> history <span class="after">&#x27F3;</span></a> -->
+	    <a id="statusbtn" onclick="dialog('jobstatus')" class="button square" data-bind="fadevisible:statusbtn()!='',html:statusbtn"></a>
 	  </div>
+	  
+	  <div style="position:absolute;top:20px;right:5%">
+	     <div style="display:inline-block;position:relative;margin-left:20px;">
+	  		<a id="selectmode" data-bind="text: selmode, attr: {class:selclass}" onclick="togglemenu('selectmodemenu')"></a>
+	      	<div class="toptext">Selection mode</div>
+	      	<div id="selectmodewrap" class="buttonmenuwrap">
+	      		<div class="menuborder"></div>
+	      		<div id="selectmodemenu" class="buttonmenu"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode"><span data-bind="text:mode"></span><span class="right" data-bind="text:icon"></span></li></ul></div>
+	      		<div class="topshadow"></div>
+	      	</div>
+	     </div>
+	   </div>
+	   
+	</div><!--top-->
+	<div id="left">
+		<div id="notree">No tree data</div>
+		<div id="treewrap"><div id="tree"></div><div id="names"></div></div>
+		<div id="bottomfade"></div><div id="topfade"></div>
+		<div id="borderDrag">&#x22EE;</div>
 	</div>
-	<div id="left"><img id="leftborder" src="img/border_left.png"><div id="borderDrag">&#x2999;</div></div>
 	<div id="right">
-	  <img id="leftshadow" src="img/shadow_left.png">
+	  <div id="namesborderDragline"><div id="namesborderDrag">&#x22EE;</div></div>
 	  <div id="seqwindow">
 	    <div id="wrap">
 	      <div id="ruler"></div>
 	      <div id="seqwrap"><div id="seq"></div></div>
 	    </div>
+	    <img id="leftshadow" src="img/shadow_left.png">
+	    <img id="rightshadow" src="img/shadow_right.png">
+	    <div id="spinner">Loading <img style="height:36px;vertical-align:bottom" src="img/spinner.gif"></div>
 	  </div>
-	  <img id="rightshadow" src="img/shadow_right.png">
 	  <div id="horizontalDragger"><div class="scrollBtn scrollLeftBtn">&lt;</div><div class="dragger"></div><div class="scrollBtn scrollRightBtn">&gt;</div></div>
 	  <div id="verticalDragger"><div class="scrollBtn scrollUpBtn">&#x2227;</div><div class="dragger"></div><div class="scrollBtn scrollDownBtn">&#x2228;</div></div>
 	</div>
+	<div id="namelabel"><span></span></div>
 	<div id="bottom"></div>
+	
+	<div id="tooltip" class="tooltip"><div class="arrow"></div><div class="tooltiptitle"></div><div class="tooltipcontent"><div class="tooltipcontentwrap"></div></div></div>
+  	<div id="tooltip2" class="tooltip"><div class="arrow, uparrow"></div><div class="tooltiptitle"></div><div class="tooltipcontent"><div class="tooltipcontentwrap"></div></div></div>
+  	<div id="backfade"></div>
   </div>
 <script type="text/javascript" src="js/script.js"></script>
 </body>

@@ -1,4 +1,4 @@
-var seqwindow,wrap,seq,seqwrap,ruler,verticalDragger_container,verticalDragger,scrollUpBtn,scrollDownBtn,horizontalDragger_container,horizontalDragger,scrollLeftBtn,scrollRightBtn;
+var right,seqwindow,wrap,seq,seqwrap,ruler,verticalDragger_container,verticalDragger,scrollUpBtn,scrollDownBtn,horizontalDragger_container,horizontalDragger,scrollLeftBtn,scrollRightBtn,canvasload,spinner,treewrap;
 
 /* function to fix the -10000 pixel limit of jquery.animate */
 $.fx.prototype.cur = function(){
@@ -102,6 +102,19 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 				//scroll
 				var scrollXAmount = (totalContentWidth-visibleWidth)/draggerXMax;
 				horizontalDragger.css("left", (0-wrap.position().left)/scrollXAmount);
+				
+				//drag by ruler
+				var wrapoffset = wrap.offset().left;
+				wrap.draggable({
+					handle: "#ruler",
+					axis: "x",
+					start: function(e, ui) { draginertia.start(0-totalContentWidth+visibleWidth, scrollXAmount, ui.position.left, e.timeStamp) },
+					drag: function(e, ui){
+						draginertia.add(ui.position.left, e.timeStamp);
+						horizontalDragger.css("left",(0-ui.position.left)/scrollXAmount); 
+					},
+       				stop: function(e, ui) { draginertia.end(e.timeStamp); } 
+				});
 			} else { //disable scrollbar if content is short
 				horizontalDragger.css("left",0).css("display","none"); //reset content scroll
 				wrap.css("left",0);
@@ -112,7 +125,7 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 			
 		//vertical scrolling ------------------------------
 			var visibleHeight = seqwindow.innerHeight()-ruler.outerHeight()-parseInt(seqwrap.css('margin-top'));
-			var totalContentHeight = seq.height();
+			var totalContentHeight = seq.height()+10;
 			if(totalContentHeight>visibleHeight){ //enable scrollbar if content is long
 				verticalDragger.css("display","block");
 				if(reloadType!="resize" && totalContentHeight != seqwindow.data("contentHeight")){
@@ -185,8 +198,6 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 		function ScrollX(shift,id){
 			var draggerX = horizontalDragger.position().left;
 			var posX = parseInt(wrap.css('left'));
-			clearTimeout(scrollXTimer);
-			scrollXTimer = setTimeout('makeImage()',500);
 			if(shift){
 				var target = posX-shift;
 				var draggerPos = (0-target)/scrollXAmount;
@@ -198,6 +209,8 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 				var target = Math.round(-draggerX*scrollXAmount);
 			}
 			if(target>0){ target = 0; }else if(Math.abs(target)>totalContentWidth-visibleWidth){ target = visibleWidth-totalContentWidth; }
+			clearTimeout(scrollXTimer);
+			scrollXTimer = setTimeout(function(){ makeImage('x:'+target);},100);
 			wrap.stop().animate({left: target}, animSpeed, easeType);
 		}
 		var scrollYTimer;
@@ -205,7 +218,7 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 			var draggerY = verticalDragger.position().top;
 			var marginY = parseInt(seq.css('margin-top'));
 			clearTimeout(scrollYTimer);
-			scrollYTimer = setTimeout('makeImage()',500);
+			scrollYTimer = setTimeout('makeImage()',100);
 			if(shift){
 				var target = marginY-shift;
 				var draggerPos = (0-target)/scrollYAmount;
@@ -216,14 +229,24 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 			else{
 				var target = Math.round(-draggerY*scrollYAmount);
 			}
+			clearTimeout(scrollYTimer);
+			scrollYTimer = setTimeout(function(){ makeImage('y:'+target);},100);
 			if(target>0){ target = 0; } else if(Math.abs(target)>totalContentHeight-visibleHeight){ target = visibleHeight-totalContentHeight; }
 			seq.stop().animate({marginTop: target}, animSpeed, easeType);
+			treewrap.stop().animate({top: target}, animSpeed, easeType);
+			if($("#namelabel").css('display')=='block'){ //move name label extension when scrolling
+				var target2 = $("#namelabel").position().top+target-marginY;
+				$("#namelabel").stop().animate({top: target2}, animSpeed, easeType);
+				var target3 = $("#tooltip").position().top+target-marginY;
+				$("#tooltip").stop().animate({top: target3}, animSpeed, easeType);
+			}
 		}
 				
 		//mousewheel
 		if(mouseWheelSupport=="yes"){
-				seqwindow.unbind("mousewheel");
-				seqwindow.bind("mousewheel", function(event, delta, deltaX, deltaY) {
+				$("#left, #seqwindow").off("mousewheel");
+				$("#left, #seqwindow").on("mousewheel", function(event, delta, deltaX, deltaY) {
+					event.preventDefault();
 					if(deltaX){
 						var velX = Math.abs(deltaX*10);
 						horizontalDragger.css("left", horizontalDragger.position().left+(deltaX*velX));
@@ -244,8 +267,7 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 							verticalDragger.css("top", draggerYMax);
 						}
 						ScrollY(false,'scroll');
-					} 
-					return false;
+					}
 				});
 		}
 		
@@ -275,7 +297,7 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 		}
 	}
 	
-	var resizeTimer;
+	var resizeTimer
 	$(window).resize(function() {
 		if(horizontalDragger.position().left>horizontalDragger_container.width()-horizontalDragger.width()){
 			horizontalDragger.css("left", horizontalDragger_container.width()-horizontalDragger.width());
@@ -285,6 +307,37 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 		}
 		CustomScroller("resize");
 		clearTimeout(resizeTimer);
-		resizeTimer = setTimeout('makeImage()',500);
+		resizeTimer = setTimeout('makeImage()',100);
 	});
 }
+
+//adding inertia for ruler drag
+var draginertia = new function(){  
+    var amplify = 500;  //adjust momentum
+    var stamps = [];
+    var limit = 0;
+    var draggeradj = 0;
+    
+    this.start = function(lim,adj,pos,time){ limit = lim; draggeradj = adj; stamps = [{pos:pos,time:time}]; };
+    
+    this.add = function(pos,time){ stamps.push({pos:pos,time:time}); if(stamps.length > 2){ stamps.shift() } };
+
+    this.end = function(time){
+    	stamps[1].time = time;        
+        var distance = Math.abs(stamps[1].pos - stamps[0].pos);
+        var time = stamps[1].time - stamps[0].time;
+        var speed = distance/time;
+        var inertia = speed > 0.02 ? Math.round(speed*amplify) : 0;
+		var curpos = wrap.position().left;
+        var endstop = stamps[0].pos>stamps[1].pos ? curpos-inertia : curpos+inertia;
+        
+        var easetype = 'easeOutCirc';
+        if(endstop>0){ endstop = 0; easetype = 'easeOutBack'; }
+        else if(endstop<limit){ endstop = limit; easetype = 'easeOutBack'; }
+        
+        wrap.stop().animate({ left:endstop+'px' }, 800, easetype);
+        horizontalDragger.stop().animate({ left:0-(endstop/draggeradj)+'px' }, 800, easetype);
+        setTimeout(function(){makeImage()},850);
+    };
+
+};
