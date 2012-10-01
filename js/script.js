@@ -8,9 +8,13 @@ var treedata = {};
 var names = {};
 var colstep = 200;
 var rowstep = 60;
-var alphabet = '-.AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz?*'.split('');
+var letters = '-_.:?!*=AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz'.split('');
+var alphabet = { 'residues': ['A','R','N','D','C','Q','E','G','H','I','L','K','M','F','P','S','T','W','Y','V','B','Z','X','-','?','*'],
+'dna': ['A','T','G','C','N','X','-','?'], 'rna': ['A','G','C','U','N','X','-','?']};
 var colors = {};
 var symbols = {};
+var canvassymbols = {'_':'-','.':'+',':':'+','!':'?','=':'*'}; //canvas masks
+var canvaslabels = {'-':'gap','_':'gap','.':'ins.',':':'ins.','?':'unkn.','!':'unkn.','*':'stop','=':'stop'};
 var lastselectionid = 0;
 var activeid = false;
 var canvaspos = [];
@@ -22,37 +26,28 @@ var selections = [];
 var maskedcols = [];
 var filescontent = {};
 var filetypes = {};
-var serverdata = {'jobdata':ko.mapping.fromJS([],jobdataopt),'analysdata':ko.observableArray()};
+var exportedseq = '';
+var exportedtree = '';
 var jobdataopt = {
 	key: function(item){ return ko.utils.unwrapObservable(item.id); },
 	create: function(args){ return new jobmodel(args.data); }
+};
+var analysdataopt = {
+	key: function(item){ return ko.utils.unwrapObservable(item.id); },
+	create: function(args){ return new analysmodel(args.data); }
+};
+var serverdata = {'jobdata':ko.mapping.fromJS([],jobdataopt),'analysdata':ko.mapping.fromJS([],analysdataopt)};
+
+var is = { //browser detection
+	ff : Boolean($.browser.mozilla),
+	chrome: Boolean(window.chrome),
+	safari: Boolean($.browser.webkit && !Boolean(window.chrome))
 }
-var jobmodel = function(data){ //generates html representation for every running job
-	console.log('jobmodel:');
-	console.log(data);
-	ko.mapping.fromJS(data, {}, this);
-    this.html = ko.computed(function() {
-        var status = this.status();
-		if(status!='running'){
-			if(status=='0'){
-				var outfiles = this.outfiles().split(',').join('\',\'');
-				status = 'ready to import <a class="button" style="position:absolute;right:-5px;top:-5px" onclick="readfiles([\''+outfiles+'\'],this,\'import\')">Import</a>';
-			}else{
-				var err = 'Exit code '+status+'. Check log for details.';
-				status = '<span style="color:red">error </span><img class="icn" src="img/help.png" title="'+err+'"> <a class="button" style="position:absolute;right:-5px;top:-5px" onclick="communicate(\'rmdir\',{\'dir\':\''+this.id()+'\')">Delete</a>';
-			}
-		}
-		var now = new Date().getTime();
-		var endtime = status=='running' ? now/1000 : parseInt(this.lasttime());
-		var runningtime = numbertosize(endtime-parseInt(this.starttime()),'sec');
-		var ltime = new Date(parseInt(this.lasttime())*1000);
-		var lastdate = ltime.getDate()+'.'+ltime.getMonth()+'.'+ltime.getFullYear().toString().substr(2)+' at '+ltime.getHours()+':'+('0'+ltime.getMinutes()).slice(-2);
-		return  '<div style="position:relative;min-width:310px"><span class="note">Status:</span> '+status+'<br><span class="note">Running time:</span> '+runningtime+'<br><span class="note">File directory:</span> '+this.id()+'<br><span class="note">Feedback <img src="img/file.png" class="icn" style="cursor:pointer;" onclick="showlog(this,\''+this.logfile()+'\')" title="Last update '+lastdate+'. Click for full log.">:</span><span class="logline"> '+this.log()+'</span></div>';
-    }, this);
-}
+var dom = {};
 
 var myModel = function(){ //KnockOut viewmodel to keep the state of the system
 	var self = this;
+	self.startfile = "testdata.xml";
 	self.zoomlevel = ko.observable(10);
 	self.zoomperc = ko.computed(function(){ var l = self.zoomlevel(); return l==2 ? 'MIN' : l==20 ? 'MAX' : l*5+'%'; });
 	self.boxw = ko.computed(function(){ return parseInt(self.zoomlevel()*1.5); });
@@ -60,6 +55,8 @@ var myModel = function(){ //KnockOut viewmodel to keep the state of the system
 	self.fontsize = ko.computed(function(){ return parseInt(self.zoomlevel()*1.8); });
 	self.nameswidth = ko.observable(50);
 	self.namesw = ko.computed(function(){ return self.nameswidth()+'px'; });
+	self.dendogram = ko.observable(false);
+	
 	self.selmode = ko.observable('default');
 	self.selmodes = [{mode:'default',icon:'\u25FB'},{mode:'columns',icon:'\u25A5'},{mode:'rows',icon:'\u25A4'}];
 	self.selclass = ko.computed(function(){ return 'button '+self.selmode(); });
@@ -68,6 +65,8 @@ var myModel = function(){ //KnockOut viewmodel to keep the state of the system
 	self.fileclick = function(data){ dialog(data); togglemenu('filemenu','hide'); };
 	self.runmenu = [{n:'Make alignment',c:'align'},{n:'Make guidetree',c:'tree'},{n:'Compact columns',c:'compact'},{n:'Test alginment',c:'test'}];
 	self.runclick = function(data){ dialog(data.c); togglemenu('runmenu','hide'); };
+	
+	self.currentid = ko.observable('');
 	self.seqtype = ko.observable('residues');
 	self.colorscheme = ko.observable('taylor');
 	self.seqtype.subscribe(function(v){
@@ -77,6 +76,12 @@ var myModel = function(){ //KnockOut viewmodel to keep the state of the system
 		else{ self.gaprate(0.005); self.gapext(0.5); self.isdna(false); }
 	});
 	self.isdna = ko.observable(false);
+	self.hasdot = ko.observable(false);
+	self.hasdot.subscribe(function(v){
+		var label = v? 'del.' : 'gap';
+		canvaslabels['-'] = label; canvaslabels['_'] = label;
+	});
+	
 	self.maxseqlen = ko.observable(0);
 	self.maxseqlength = ko.computed(function(){ return numbertosize(self.maxseqlen(),self.seqtype()) });
 	self.minseqlen = ko.observable(0);
@@ -92,52 +97,53 @@ var myModel = function(){ //KnockOut viewmodel to keep the state of the system
 	self.hiddenlength = ko.computed(function(){ return numbertosize(self.hiddenlen(),self.seqtype()) });
 	self.treesource = ko.observable('');
 	self.seqsource = ko.observable('');
+	
 	self.gaprate = ko.observable(0.005);
 	self.gapext = ko.observable(0.5);
-	/*self.runningjobs = ko.observableArray();
-	self.readyjobs = ko.observableArray();
-	self.importedjobs = ko.observableArray();
-	self.jobstatus = function(jobid,data){
-		if(!data){ return jobid ? jobdata[jobid] : jobdata; }
-		else{
-			if(!jobdata[jobid]){ self.runningjobs.push(jobid); jobdata[jobid] = data; } //new job data
-			else{ $.each(data,function(k,val){ jobdata[jobid][k] = val }); } //update data
-
-			if(data.status=='running'){ self.runningjobs.valueHasMutated(); }
-			else if(data.status=='imported'){ obdata[jobid].status = 'imported'; self.readyjobs.remove(jobid); self.importedjobs.push(jobid) }
-			else { self.runningjobs.remove(jobid); self.readyjobs.push(jobid) }
-		}
-	}
-	self.showstatus = ko.computed(function(){ return self.runningjobs().length+self.readyjobs().length==0? false:true }).extend({throttle: 100});
-	self.statusbtn = ko.computed(function(){
-		var running = self.runningjobs().length; var ready = self.readyjobs().length; var str = '';
-		if(running > 0){ var s = running>1? 's':''; str = running+' job'+s+' running'; }
-		if(ready > 0){ var s = ready>1? 's':''; if(running>0) str+= ', '; else ready += ' job'+s; str+= ready+' finished'; }
-		return str;
-	}).extend({throttle: 100});
-	self.statushtml = ko.computed(function(){
-		var running = self.runningjobs().length; var ready = self.readyjobs().length;
-		var html = {};
-		
-		return html;
-	}).extend({throttle: 100});*/
+	self.sortjobsby = ko.observable('starttime');
+	self.sortedjobs = ko.computed(function(){ return sortdata('jobdata',self.sortjobsby()); }).extend({throttle:100});
+	self.jobtimeout = '';
 	self.statusbtn = ko.computed(function(){
 		var running=0,ready=0,str='';
-		console.log(serverdata.jobdata());
-		$.each(serverdata.jobdata(),function(i,job){
-		console.log(job.status());
+		$.each(self.sortedjobs(),function(i,job){
 			if(job.status()=='running') running++;
-			else if(job.status()!='imported') ready++;
+			else if(!job.imported()) ready++;
 		});
 		if(running > 0){
 			var s = running>1? 's':''; str = running+' job'+s+' running';
-			setTimeout(function(){communicate('alignstatus','','jobdata')},1000); //update data in 1s
+			if(self.jobtimeout) clearTimeout(self.jobtimeout);
+			self.jobtimeout = setTimeout(function(){ communicate('alignstatus','','jobdata'); },1000); //update data in 1s
 		}
 		if(ready > 0){ var s = ready>1? 's':''; if(running>0) str+= ', '; else ready += ' job'+s; str+= ready+' finished'; }
-		console.log(str);
+		if(!str && $('#jobstatus').length>0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },1000); } //close empty jobstatus window
 		return str;
-	}).extend({throttle: 100});;
-};
+	}).extend({throttle: 200});
+	self.sortanalysopt = [{t:'Name',v:'name'},{t:'Analysis ID',v:'id'},{t:'Start date',v:'starttime'},{t:'Last opened',v:'imported'},{t:'Last saved',v:'savetime'}];
+	self.sortanalysby = ko.observable('starttime');
+	self.sortedanalys = ko.computed(function(){ return sortdata('analysdata',self.sortanalysby()); }).extend({throttle:100});
+	self.additem = function(div){
+		div = $(div);
+		if(div.hasClass('itemdiv')){ div.css({'display':'none'}); div.fadeIn(800); }
+	};
+	self.removeitem = function(div){
+		if(div.tagName=='DIV'&&div.offsetHeight!=0){
+			$(div).fadeOut(300,function(){ $(this).remove(); });
+		}else{ $(div).remove(); }
+	};
+};//myModel
+
+var myExport = function(){
+	var self = this;
+	self.types = [{name:'fasta',fileext:'.fa',desc:'',hastree:false,interlace:false},{name:'nexus',fileext:'.nex',desc:'',hastree:true,interlace:true},{name:'Phylip',fileext:'.phy',desc:'',hastree:false,interlace:true},{name:'PAML',fileext:'.phy',desc:'Phylip format optimized for PAML',hastree:false,interlace:false},{name:'RAxML',fileext:'.phy',desc:'Phylip format optimized for RAxML',hastree:false,interlace:false}];
+	self.selected = ko.observable('fasta');
+	self.curitem = ko.computed(function(){ return self.types.filter(function(item){ return item.name == self.selected() })[0]; });
+	self.filename = ko.observable('exported');
+	self.incltree = ko.observable(false);
+	self.inclhidden = ko.observable(false);
+	self.interlaced = ko.observable(false);
+	self.maskwith = ko.observable('lowercase');
+}
+
 ko.bindingHandlers.fadevisible = {
 	init: function(element){ $(element).css('display','none') },
     update: function(element, value){
@@ -149,35 +155,118 @@ ko.bindingHandlers.slidevisible = {
 	init: function(element){ $(element).css('display','none') },
     update: function(element, value){
         var value = ko.utils.unwrapObservable(value());
-        if (value) $(element).slideDown();
+        if (value == true) $(element).slideDown(); else $(element).slideUp();
     }
 };
+
 var model = new myModel();
+var exportmodel = new myExport();
 
+var jobmodel = function(data){ //generates html representation for every running job
+	ko.mapping.fromJS(data, {}, this);
+	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
+	
+	this.html = ko.computed(function() {
+    	if(this.imported()){ return 'Files from '+this.id()+'<br>have been imported. '+btnhtml('dialog(\'history\')','History','top:3px'); }
+        var status = this.status();
+        var btn = '';
+		if(status!='running'){
+			if(status=='0' && this.outfile()){
+				var outfiles = this.outfile().split(',').join('\',\'');
+				status = 'ready to import';
+				btn = btnhtml('readfiles([\''+outfiles+'\'],this,\'import:'+this.id()+'\')','Open','','Open '+outfiles);
+			}else{
+				var err = ((status!='0')?'Exit code '+status+'. ':'')+((!this.outfile())?'No result file. ':'')+' Check log for details.';
+				status = '<span style="color:red">Failed. </span><img class="icn" src="img/help.png" title="'+err+'"> ';
+				btn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','color:red','Delete data of job '+this.id(),'removebtn');
+			}
+		}
+		else{ btn = btnhtml('dialog(\'terminate\',{id:\''+this.id()+'\',btn:this})','Kill','color:red','Terminate job '+this.id(),'removebtn'); }
+		var now = new Date().getTime();
+		var endtime = status=='running' ? now/1000 : parseInt(this.lasttime());
+		var runningtime = numbertosize(endtime-parseInt(this.starttime()),'sec');
+		var lastdate = msectodate(this.lasttime());
+		var logline = this.log()? this.log() : 'Process finished '+lastdate;
+		return  '<span class="note">Name:</span> <span class="logline">'+this.name()+'<span class="fade"></span></span><br><span class="note">Status:</span> '+status+'<br><span class="note">Running time:</span> '+runningtime+btn+'<br><span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">File directory:</span> '+this.id()+'<br><span class="note">Feedback:</span> <span class="logline actiontxt" onclick="showfile(this,\''+this.logfile()+'\')" title="Last update '+lastdate+'. Click for full log.">'+logline+'<span class="fade"></span></span>';
+    }, this);
+}
 
-function communicate(action,senddata,saveto){ //send and receive+save data from server fn(str,obj,[str])
+var analysmodel = function(data){ //generates html representation for past (imported) jobs
+	ko.mapping.fromJS(data, {}, this);
+	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
+	this.divh = '55px';
+	
+    this.html = ko.computed(function(){
+    	var imported = this.hasOwnProperty('imported')? msectodate(this.imported()) : 'Never';
+    	var saved = this.hasOwnProperty('savetime')? msectodate(this.savetime()) : 'Never';
+    	this.isactive = false;
+    	if(this.hasOwnProperty('outfile') && this.outfile()){
+    		var ofiles = this.outfile().split(',').join('\',\'');
+    		if (typeof(model)!='undefined' && this.id()==model.currentid()){ 
+    			var btnname = 'Restore';
+    			var btntitle = 'Revert back to saved state';
+    			this.isactive = true;
+    		}else{
+    			var btnname = 'Open';
+    			var btntitle = 'Open '+this.outfile();
+    		}
+    		var itembtn = btnhtml('readfiles([\''+ofiles+'\'],this,\'import:'+this.id()+'\')',btnname,'',btntitle);
+    		var removebtn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','','Delete folder '+this.id(),'removebtn');
+    	}
+    	else{ //no output files specified in metadata
+    		var itembtn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','color:red','Delete folder '+this.id());
+    		var removebtn = '';
+    		imported += ' (broken)';
+    	}
+    	var alignerdata = this.aligner().split(':');
+		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+imported+'<br><span class="note">File directory:</span> <span class="actiontxt" title="Toggle folder content" onclick="showfile(this,\''+this.id()+'\')">'+this.id()+'</span><span class="actiontxt itemexpand" onclick="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC;</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+saved+'<br><span class="note">Aligner:</span> <span class="label" title="Executable: '+alignerdata[1]+'">'+alignerdata[0]+'</span><br><span class="note">Parameters:</span> <span class="logline label" style="cursor:text" title="'+this.parameters()+'">'+this.parameters()+'<span class="fade"></span></span>'+removebtn+'</div>';
+    }, this);
+}
+
+function toggleitem(btn,starth){
+	var itemdiv = $(btn).closest('div.itemdiv');
+	if(btn.innerHTML == '\u25BC'){ //expand itemdiv
+		itemdiv.css('height',itemdiv.children().first().height()+12+'px');
+		setTimeout(function(){btn.innerHTML = '\u25B2';},400);
+	}
+	else{ //contract
+		itemdiv.css('height',starth);
+		setTimeout(function(){btn.innerHTML = '\u25BC';},400);
+	}
+}
+
+function communicate(action,senddata,saveto){ //send and receive+save data from server fn(str,obj,[str|obj])
+	if(!action) return;
 	var optdata = new FormData();
 	optdata.append('action',action);
-	if(senddata) $.each(senddata,function(key,val){ opdata.append(key,val) });
+	if(senddata) $.each(senddata,function(key,val){ optdata.append(key,val) });
 	$.ajax({
 		type: "POST",
 		url: 'backend.php',
     	dataType: "text",
     	success: function(data){
+    		var endfunc = action=='writemeta'? function(){ communicate('getmeta','','analysdata'); } : '';
     		if(typeof(saveto)=='string'){ //save server JSON data to local variable
     			if(typeof(serverdata[saveto])=='undefined'){
     				serverdata[saveto] = ko.mapping.fromJS(data,{key:function(item){ return ko.utils.unwrapObservable(item.id); }});
     			}
     			else{ ko.mapping.fromJSON(data,{},serverdata[saveto]);  }
-    			console.log('communicate'); console.log(serverdata);
     		}
+    		else if(typeof(saveto)=='object'){
+    			if(saveto.hasOwnProperty('btn')){
+    				data = $.parseJSON(data);
+    				if(typeof(data)=='string') saveto.btn.innerHTML = data;
+    				else if(data.file) saveto.btn.href = data.file;
+    				if($(saveto.btn).css('opacity')==0) $(saveto.btn).css('opacity',1);
+    			}
+    			if(saveto.hasOwnProperty('func')){ endfunc = function(){ saveto.func(data); }; }
+    		}
+    		if(endfunc){ setTimeout(endfunc,300); } //refresh local data
     	},
     	trycount: 0,
     	error: function(xhrobj,status,msg){
-    		if(!msg&&status!="abort"){//no response. try again
-        		if(this.trycount<1){ this.trycount++; setTimeout(function(){$.ajax(this)},1000); return; }
-        		else{ console.log('Server error.'); }
-        	}
+    		if(typeof(saveto)=='object' && saveto.hasOwnProperty('btn')){ saveto.btn.innerHTML = 'Failed'; }
+    		console.log('Server communication error');
     	},
     	data: optdata,
         cache: false,
@@ -192,10 +281,14 @@ function togglemenu(id,action,data){
 	if(typeof(action)=='undefined' || action==''){ var action = menudiv.parent().css('display')=='none' ? 'show' : 'hide'; }
 	if(action=='show'){
 		menudiv.parent().css('display','block');
-		menudiv.animate({'margin-top':'-1px'},500,'easeOutExpo');
+		setTimeout(function(){ menudiv.css('margin-top','-1px') },50);
 	}
 	else if (action=='hide'){
-		menudiv.animate({'margin-top':0-menudiv.innerHeight()-6},200,'linear',function(){ menudiv.parent().css('display','none'); });
+		$.each($('div.buttonmenu'),function(){
+			var self = $(this);
+			self.css('margin-top',0-menudiv.innerHeight()-6+'px');
+			setTimeout(function(){ self.parent().css('display','none') },400);
+		});
 	}
 }
 
@@ -218,82 +311,131 @@ function numbertosize(number,type,min) {
     }
 };
 
-function statushtml(kind){
-	data = kind=='jobs'? jobdata : kind=='analysis'? analysdata : {};
-	$.each(data,function(id,job){
-			var status = job.status;
-			if(status!='running'){
-				if(status=='0'){
-					var outfiles = job.outfiles.split(',').join('\',\'');
-					status = 'ready to import <a class="button" style="position:absolute;right:-5px;top:-5px" onclick="readfiles([\''+outfiles+'\'],this,\'import\')">Import</a>';
-				}else{
-					var err = 'Exit code '+status+'. Check log for details.'; 
-					if(jobdata.errfile) err+='. Error log: '+job.errfile; 
-					status = '<span style="color:red">error </span><img class="icn" src="img/help.png" title="'+err+'"> <a class="button" style="position:absolute;right:-5px;top:-5px" onclick="deletedir(\''+id+'\',this)">Delete</a>'; }
-			}
-			var now = new Date().getTime();
-			var endtime = status=='running' ? now/1000 : parseInt(job.lasttime);
-			var runningtime = numbertosize(endtime-parseInt(job.starttime),'sec');
-			var ltime = new Date(parseInt(job.lasttime)*1000);
-			var lastdate = ltime.getDate()+'.'+ltime.getMonth()+'.'+ltime.getFullYear().toString().substr(2)+' at '+ltime.getHours()+':'+('0'+ltime.getMinutes()).slice(-2);
-			html[id] =  '<div style="position:relative;min-width:310px"><span class="note">Status:</span> '+status+'<br><span class="note">Running time:</span> '+runningtime+'<br><span class="note">File directory:</span> '+id+'<br><span class="note">Feedback <img src="img/file.png" class="icn" style="cursor:pointer;" onclick="showlog(this,\''+job.logfile+'\')" title="Last update '+lastdate+'. Click for full log.">:</span><span class="logline"> '+job.log+'</span></div>';
-		});
+function msectodate(sec){
+	var t = new Date(parseInt(sec)*1000);
+	return ('0'+t.getDate()).slice(-2)+'.'+('0'+(t.getMonth()+1)).slice(-2)+'.'+t.getFullYear().toString().substr(2)+' at '+t.getHours()+':'+('0'+t.getMinutes()).slice(-2);
 }
 
-
-function parsefiles(dialogdiv){
-	var errors = []; var notes = []; var treeoverwrite = false; var seqoverwrite = false;
-	var Tnames = {}; var Tsequences = {}; var Ttreedata={}; var Ttreesource = ''; var Tseqsource = '';
-	var Ttotalseqcount=0; var Tmaxseqlen=0; var Talignlen=0; var Tminseqlen=0; var Tleafcount = 0; var Tnodecount = 0;
+function parseimport(dialogdiv){
+	var errors = [], notes = [], treeoverwrite = false, seqoverwrite = false;
+	var Tnames = {}, Tsequences = {}, Ttreedata = {}, Ttreesource = '', Tseqsource = '', Tseqformat = '';
+	var Ttotalseqcount=0, Tmaxseqlen=0, Talignlen=0, Tminseqlen=0, Tleafcount=0, Tnodecount=0;
+	
+	var parseseq = function(seqtxt,filename,format,nspecies,nchars){
+		if(!$.isEmptyObject(Tsequences)){ Tsequences = {}; seqoverwrite = true; }
+   		Tseqsource = filename;
+   		
+   		var iupac = 'ARNDCQEGHILKMFPSTUWYVBZX\\-?*';
+   		var seqstart = new RegExp('\\s(['+iupac+']{10}\\s?['+iupac+']{10}.*)$','img');
+   		if(format=='clustal'){ //remove clustal-specific additions
+   			seqtxt = seqtxt.replace(/ {1}\d+$/mg,'');
+   			seqtxt = seqtxt.replace(/^[ \:\.\*]+$/mg,'');
+   		}
+   		else if(format=='nexus'){ seqtxt = seqtxt.replace(/\[.+\]/g,''); } //remove "[]"
+   		else if(format=='phylip' && nspecies){ //detect & reformat strict phylip
+   			var strictphy = false;
+   			var capture = seqstart.exec(seqtxt);
+   			if(capture){
+   				var linelength = capture[1].length;
+   				for(var s=1;s<nspecies;s++){
+   					capture = seqstart.exec(seqtxt);
+   					if(linelength != capture[1].length){ strictphy = true; break; }
+   					linelength = capture[1].length;
+   				}
+   				seqstart.lastIndex = 0;
+   			} else { strictphy = true; }
+   			if(strictphy){ seqtxt = seqtxt.replace(/^ *.{10}/gm,"$& "); }
+   		}
+   		seqtxt = seqtxt.replace(/ *[\n\r]\s*/g,'\n'); //collapse multilines+whitespace
+   		seqtxt = seqtxt.replace(/ {2,}/g,' ');
+   		var taxanames = [], bookmark = 0, interleaved = false, firstseqline = true, name = '';
+   		var repeatingnames = format=='phylip'? false : true;
+   		while(capture = seqstart.exec(seqtxt)){ //get names & first sequences
+   			var seqarr = capture[1].replace(/ /g,'').split('');
+   			if(bookmark < capture.index){ //found name btwn sequences
+   				name = seqtxt.substring(bookmark+1,capture.index);
+   				if(Tsequences[name]){ interleaved = true; repeatingnames=name; break; }
+   				Tsequences[name] = seqarr; Tnames[name] = name; taxanames.push(name);
+   			}
+   			else{ //found sequential sequence line
+   				if(firstseqline){ if(taxanames.length>1){ interleaved = true; repeatingnames=false; break; } firstseqline = false; }
+   				Tsequences[name].push.apply(Tsequences[name],seqarr);
+   			}
+   			bookmark = seqstart.lastIndex;
+   		}
+   		if(interleaved){ //continue parsing for interleaved seq.
+   			var fulline = /^.+$/gm;
+   			fulline.lastIndex = bookmark;
+   			var nameind = 0, name = '';
+   			while(capture = fulline.exec(seqtxt)){
+   				var name = taxanames[nameind];
+   				if(repeatingnames){
+   					if(capture[0].indexOf(name)!=0){ errors.push("Non-unique taxa name found!<br>("+repeatingnames+")"); break; }
+   					seqarr = capture[0].substr(name.length).replace(/ /g,'').split('');
+   				}
+   				else seqarr = capture[0].replace(/ /g,'').split('');
+   				Tsequences[name].push.apply(Tsequences[name],seqarr);
+   				nameind++; if(nameind==taxanames.length) nameind = 0;
+   			}
+   		}
+   		if(nspecies && errors.length==0 && taxanames.length!=nspecies) notes.push("Number of taxa found doesn't match <br>the file metainfo ("+nspecies+", "+taxanames.length+" found)");
+   		if(nchars && errors.length==0 && Tsequences[taxanames[0]].length!=nchars) notes.push("The sequence length doesn't match <br>the file metainfo ("+nchars+" chars, "+Tsequences[taxanames[0]].length+" found)");			
+	};
+	
+	var parsenodeseq = function(){
+		var self = $(this);
+   		var id = self.attr("id");
+   		var name = self.attr("name") ? self.attr("name") : '';
+   		var tmpseq = self.find("sequence").text();
+   		if(tmpseq.length != 0){
+   			tmpseq = tmpseq.replace(/\s+/g,'');
+   			Tsequences[id] = tmpseq.split('');
+   			Tnames[id] = name;
+   		}
+   	};
+	
+	var parsetree = function(treetxt,filename,format){ //import tree data
+		if(!$.isEmptyObject(Ttreedata)){ Ttreedata = {}; treeoverwrite = true; }
+		Ttreesource = filename;
+		if(!format) format = 'newick';
+		if(format=='newick'){ //remove whitespace
+			if(Tseqformat=='fasta'){ //match fasta name truncating
+			console.log('fasta');
+				//treetxt = treetxt.replace(/(['"]\w+)[^'"]+(['"])/g,"$1$2");
+			}
+			treetxt = treetxt.replace(/[\n\r]+/g,'')+';';
+		}
+		Ttreedata[format] = treetxt;
+	};
 	
 	var filenames = Object.keys(filescontent);
-	filenames.sort(function(a,b){ //sort filelist: [nexus,xml,phylip,other]
+	filenames.sort(function(a,b){ //sort filelist: [nexus,xml,phylip,...,tre]
+		if(/\.tre/.test(a)) return 1; else if(/\.tre/.test(b)) return -1;
 		return /\.ne?x/.test(a)? -1: /\.xml/.test(a)? /\.ne?x/.test(b)? 1:-1 : /\.ph/.test(a)? /\.ne?x|\.xml/.test(b)? 1:-1 : /\.ne?x|\.xml|\.ph/.test(b)? 1: 0;
 	});
+	
 	$.each(filenames,function(i,filename){
 		var file = filescontent[filename];
 		if(/^<\w+>/.test(file)){ //xml
-			if(file.indexOf("<phyloxml")!=-1){ //phyloxml tree fromat
-				if(!$.isEmptyObject(Ttreedata)){ Ttreedata = {}; treeoverwrite = true; }
-				Ttreesource = filename;
-				Ttreedata = {phyloxml: file};
+			if(file.indexOf("<phyloxml")!=-1){ //phyloxml tree
+				parsetree(file,filename,'phyloxml');
 			}
-			else{  //HSAML format (tree+sequences)
+			else{  //HSAML
 			  var newickdata = $(file).find("newick");
-			  if(newickdata.length != 0){//newick tree found in xml
-			  	if(!$.isEmptyObject(Ttreedata)){ Ttreedata = {}; treeoverwrite = true; }
-			  	Ttreesource = filename;
-				Ttreedata = {newick: newickdata.text()+';'};
-			  }
+			  if(newickdata.length != 0){ parsetree(newickdata.text(),filename); }
 			  var leafdata = $(file).find("leaf");
 			  if(leafdata.length != 0){ if(!$.isEmptyObject(Tsequences)){ Tsequences = {}; seqoverwrite = true; }}
 			  Tseqsource = filename;
-   			  	leafdata.each(function(){
-   				var id = $(this).attr("id");
-   				var name = $(this).attr("name") ? $(this).attr("name") : '';
-   				var tmpseq = $(this).find("sequence").text();
-   				tmpseq = tmpseq.replace(/\s+/g,'');//remove whitespace
-   				Tsequences[id] = tmpseq.split('');
-   				Tnames[id] = name;
-   			  });
+   			  leafdata.each(parsenodeseq);
    			  var nodedata = $(file).find("node");
-   			  nodedata.each(function(){
-   				var id = $(this).attr("id");
-   				var name = $(this).attr("name") ? $(this).attr("name") : '';
-   				var tmpseq = $(this).find("sequence").text();
-   				if(tmpseq.length != 0){
-   					tmpseq = tmpseq.replace(/\s+/g,'');
-   					Tsequences[id] = tmpseq.split('');
-   					Tnames[id] = name;
-   				}
-   			  });
+   			  nodedata.each(parsenodeseq);
    			}
    			if(newickdata.length!=0 && leafdata.length!=0){ return false }//got data, no more files needed
    		}
    		else if(/^>\s?\w+/m.test(file)){ //fasta
    			if(!$.isEmptyObject(Tsequences)){ seqoverwrite = true; }
-   			Tseqsource += ' '+filename;
-   			var nameexp = /^>\s?(\w+).*/mg;
+   			Tseqsource += ' '+filename; Tseqformat = 'fasta';
+   			var nameexp = /^> ?(\w+).*$/mg;
    			var result = [];
    			while(result = nameexp.exec(file)){ //find nametags from fasta
    				var to = file.indexOf(">",nameexp.lastIndex);
@@ -301,101 +443,50 @@ function parsefiles(dialogdiv){
    				var tmpseq = file.substring(nameexp.lastIndex,to); //get text between fasta tags
    				tmpseq = tmpseq.replace(/\s+/g,''); //remove whitespace
    				var name = result[1];
+   				if(Tsequences[name]){ errors.push("Non-unique taxa name found!<br>("+name+")"); break; }
    				Tsequences[name] = tmpseq.split('');
    				Tnames[name] = name;
    			}
    		}
-   		else if(/^clustal/i.test(file)){ //ClustalW MSA
-   			if(!$.isEmptyObject(Tsequences)){ Tsequences = {}; seqoverwrite = true; }
-   			Tseqsource = filename;
-   			file = file.substring(file.search(/[\n\r]{2}/)); //remove first line
-   			file = file.replace(/\s+/g," ").split(" "); //collapse space & split up
-   			for(var j=0;j<file.length;j++){ //data array: [species1,sequence1,species2,…]
-   				var name = file[j];
-   				if(/[\w\#]{3,}/.test(name)){
-   					if(!Tsequences[name]){ Tsequences[name] = ''; Tnames[name] = name; }
-   					Tsequences[name].push(file[j+1].split(''));
-   					j++;	
-   				}
-   			}
+   		else if(/^clustal/i.test(file)){ //Clustal
+   			file = file.substring(file.search(/[\n\r]+/)); //remove first line
+   			parseseq(file,filename,'clustal');
    		}
-   		else if(/(\([\n\r])+\w+/.test(file)){ //newick tree in phylip format
-   			var nwkstart = file.indexOf("(");
-   			var nwkend = file.indexOf(";",nwkstart);
-   			if(nwkend==-1){ nwkend = file.length }
-   			Ttreedata = {newick: file.substring(nwkstart,nwkend).replace(/[\n\r]/,"") };
-   			var seqstart = file.search(/\w+\s+[a-y]+[\n\r]/i);
-   			if(seqstart!=-1){ //sequence data found in phylip file
-   			  var sep = file.match(/[\n\r]{2}/)[0];
-   			  if(sep){
-   				if(!$.isEmptyObject(Tsequences)){ Tsequences = {}; seqoverwrite = true; }
-   				Tseqsource = filename;
-   				var seqend = seqstart<nwkstart ? nwkstart : file.length;
-   				var seqblocks = file.substring(seqstart,seqend).split(sep);
-   				var seqnames = []; var result = [];
-   				while(result = /(\w+)\s+[a-y]+[\n\r]/ig.exec(seqblocks[0])){
-   					var name = result[1];
-   					seqnames.push(name); Tsequences[name] = []; Tnames[name] = name;
-   				}
-   				for(var b=0; b<seqblocks.length; b++){
-   					var seqrows = seqblocks.split(/[\n\r]/);
-   					if(seqrows.length!=seqnames.length){ console.log('phylip import error'); break; }
-   					for(var n=0; n<seqnames.length; n++){
-   						var name = seqnames[n];
-   						var row = seqrows[n];
-   						if(b==0){ //remove names from first datablock
-   							row = row.substr(name.length);
-   						}
-   						Tsequences[name].push(row.split(''));
-   					}
-   				}
-   				return false; //got data, no more files needed
-   			  }
-   			}
+   		else if(narr = file.match(/^\s*(\d+) {1}(\d+) *[\n\r]/)){ //phylip alignment
+   			file = file.substring(file.search(/[\n\r]/)); //remove first line
+   			parseseq(file,filename,'phylip',narr[1],narr[2]);
    		}
    		else if(file.indexOf("#NEXUS")!=-1){ //NEXUS
    			var blockexp = /begin (\w+);/igm;
    			var result = '', hastree=false, hasseq=false;
    			while(result = blockexp.exec(file)){ //parse data blocks
    				var blockname = result[1].toLowerCase();
-   				if(blockname=='trees'||blockname=='data'){
+   				if(blockname=='trees'||blockname=='data'||blockname=='characters'){
    					if(blockname=='trees'){
-   						if(!$.isEmptyObject(Ttreedata)){ Ttreedata = {}; treeoverwrite = true; }
-   						Ttreesource = filename;
    						var blockstart = file.indexOf('(',blockexp.lastIndex);
    						var blockend = file.indexOf(';',blockstart);
-   						var blocktxt = file.substring(blockstart,blockend); //collapse space in block content
-   						Ttreedata = { newick: blocktxt+';' };
+   						var blocktxt = file.substring(blockstart,blockend);
+   						parsetree(blocktxt,filename);
    						hastree = true;
    					}
-   					else if(blockname=='data'){
-   						if(!$.isEmptyObject(Tsequences)){ Tsequences = {}; seqoverwrite = true; }
-   						Tseqsource = filename;
+   					else if(blockname=='data'||blockname=='characters'){
+   						if(marr=file.match(/ntax=(\d+)/i)) var ntax = marr[1]; else var ntax = '';
+   						if(marr=file.match(/nchar=(\d+)/i)) var nchar = marr[1]; else var nchar = '';
    						var blockstart = file.indexOf(file.match(/matrix/i)[0],blockexp.lastIndex);
    						var blockend = file.indexOf(';',blockstart);
-   						var blocktxt = file.substring(blockstart+6,blockend).replace(/\s+/g," "); //collapse space in block content
-   						blocktxt = blocktxt.split(/\s/);
-   						for(var j=0;j<blocktxt.length;j++){ //excel data array: [species1,sequence1,species2,…]
-   							var name = blocktxt[j]; 
-   							if(/[\w\#]{3,}/.test(name)){ //expects chars [a-zA-Z_0-9#] in species names
-   								if(!Tsequences[name]){ Tsequences[name] = []; Tnames[name] = name; }
-   								Tsequences[name].push(blocktxt[j+1].split(''));
-   								j++;	
-   							}
-   						}
+   						var blocktxt = file.substring(blockstart+6,blockend);
+   						parseseq(blocktxt,filename,'nexus',ntax,nchar);
    						hasseq = true;
    					}
    				}
    			}
-   			if(hastree&&hasseq){ return false } //got tree&seq: break
+   			if(hastree&&hasseq){ return false } //got tree+seq: break
    		}
-   		else if(/\(\w+(:\d+\.?\d*)?,\w+(:\d+\.?\d*)?\)\S*(:\d+\.?\d*)?,\w+/.test(file)){ //newick tree
-   			if(!$.isEmptyObject(Ttreedata)){ Ttreedata = {}; treeoverwrite = true; }
-   			Ttreesource = filename;
-   			Ttreedata = {newick: file};
+   		else if(/^\s?\(+\s?(\w+|['"][^'"]+['"])(:\d+\.?\d*)?,\s?\(+\s?['"\w]+/.test(file)){ //newick tree
+   			parsetree(file,filename);
    		}
    		else{ 
-   			errors.push("Couldn't identify filetype for "+filename);
+   			errors.push("Couldn't identify fileformat for "+filename);
    		}
 	});
 	
@@ -406,7 +497,7 @@ function parsefiles(dialogdiv){
 	visiblerows.removeAll();
 	leafs = [];
 	if($.isEmptyObject(Ttreedata)){
-		//no tree: fill in data otherwise filled by jsPhyloSVG
+		//no tree: make placeholders (otherwise made by jsPhyloSVG)
 		var nodecount = 0; var leafcount = namearr.length; Ttreesource = false;
 		$.each(namearr,function(indx,id){
 			leafs[id] = Tnames[id] ? {name:Tnames[id]} : {name:id};
@@ -431,20 +522,23 @@ function parsefiles(dialogdiv){
 		if(notes.length!=0){
 			var ul = document.createElement("ul");
 			$.each(notes,function(j,note){ $(ul).append("<li>"+note+"</li>") }); 
-			setTimeout(function(){ makewindow('Notes',['<br>',ul,'<br>'],{btn:'OK'}); }, 5500); 
+			setTimeout(function(){ makewindow('File import warnings',['<br>',ul,'<br>'],{btn:'OK',icn:'info.png'}); }, 3000); 
 		}
 		
 		Tminseqlen = Tsequences[namearr[0]].length;
-		var longestseq = '';
+		var longestseq = '', hasdot = false;
 		for(var n=0;n<namearr.length;n++){ //count sequence lengths
 			var tmpseq = Tsequences[namearr[n]].join('');
+			if(!hasdot && tmpseq.indexOf('.')!=-1) hasdot = true;
 			if(tmpseq.length >= Talignlen){ Talignlen = tmpseq.length }
 			tmpseq = tmpseq.replace(/-/g,'');
 			var seqlen = tmpseq.length;
    			if(seqlen >= Tmaxseqlen){ Tmaxseqlen = seqlen; longestseq = tmpseq; }
    			if(seqlen <= Tminseqlen){ Tminseqlen = seqlen; }
 		}
-		longestseq = longestseq.replace(/[atgc]/ig,''); //check if a sequence consists of DNA symbols
+		model.hasdot(hasdot);
+		var dnachars = new RegExp('['+alphabet.dna.slice(0,-2).join('')+'_.:?!'+']','ig');
+		longestseq = longestseq.replace(dnachars,''); //check if a sequence consists of DNA symbols
 		if(longestseq.length==0){ model.seqtype('dna') } else if(longestseq.replace(/u/ig,'').length==0){ model.seqtype('rna') } else{ model.seqtype('residues') }
 		
 		
@@ -452,60 +546,80 @@ function parsefiles(dialogdiv){
 		model.minseqlen(Tminseqlen); model.maxseqlen(Tmaxseqlen);
 		model.nodecount(nodecount); model.leafcount(leafcount); visiblecols.removeAll();
 		treedata = Ttreedata; model.treesource(Ttreesource); model.seqsource(Tseqsource); first = true;
-		for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark hidden columns
+		for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark visible columns
 		makecolors();
    		redraw();
+   		return true;
 	}
-	else { 
-		if(dialogdiv){ //diplay errors, no import
-			var ul = document.createElement("ul");
-			$(ul).css('color','red');
-			$.each(errors,function(j,err){ $(ul).append("<li>"+err+"</li>") });
-			dialogdiv.find("ul").after('<br><b>File import errors:</b><br>',ul);
-		} else { console.log(errors); }
+	else { //diplay errors, no import
+		var ul = document.createElement("ul");
+		$(ul).css('color','red');
+		$.each(errors,function(j,err){ $(ul).append("<li>"+err+"</li>") });
+		if(dialogdiv){  dialogdiv.find("ul").after('<br><b>File import errors:</b><br>',ul); }
+		else { makewindow('File import failed',['<br>',ul,'<br>'],{btn:'OK',icn:'warning.png'}); }
+		return false;
 	}
 }
 
 function parseexport(filetype,options){
 	if(typeof(options)=='undefined'){ options={} }
-	var output = ''; var ids = [];
+	var output = '', ids = [], regexstr = '', dict = {};
+	
+	if(options.masksymbol){ $.each(alphabet[model.seqtype()],function(i,letter){ //translation for masked positions
+		if(symbols[letter]['masked']) dict[symbols[letter]['masked']] = options.masksymbol;
+	});}
+	dict['!'] = '?'; dict['='] = '*';
+	if(options.gapsymbol){ $.each(['-','_','.',':'],function(i,v){ dict[v] = options.gapsymbol; }); }
+	else { $.each(['_','.',':'],function(i,v){ dict[v] = '-'; }); }
+	$.each(dict,function(k,v){ regexstr += k; });
+	var regex = regexstr ? new RegExp('['+regexstr+']','g') : '';
+	var translate = regexstr ? function(s){ return dict[s] || s; } : '';
+	
+	if(filetype=='newick'||options.includetree){
+		var treefile = options.includeanc? treedata.newick : treedata.newick.replace(/\#\d+\#/g,'');
+		$.each(names,function(id,name){ //id=>name in treefile
+			treefile = treefile.replace(id+':',name+':');
+		}); 
+	}else{ var treefile = ''; }
+	
 	if(options.includeanc) ids = Object.keys(sequences); else ids = Object.keys(leafs);
+	var specount = ids.length; var ntcount = model.alignlen();
 	if(filetype=='fasta'){
-		$.each(ids,function(d,id){
+		$.each(ids,function(j,id){
 			output += '>'+names[id]+"\n";
 			for(var c=0;c<sequences[id].length;c+=50){
-				output += sequences[id].slice(c,c+49).join('')+"\n";
+				output += sequences[id].slice(c,c+49).join('').replace(regex,translate)+"\n";
 			}
 		});
 	}
-	else if(filetype=='newick'){
-		output = options.includeanc? treedata.newick : treedata.newick.replace(/\#\d+\#/g,'');
-		$.each(names,function(id,name){ //replace ids with names in tree file
-			output = output.replace(id+':',name+':');
+	else if(filetype=='phylip'){
+		output = specount+" "+ntcount+"\n";
+		$.each(ids,function(j,id){
+			
 		});
 	}
+	else if(filetype=='newick'){ output = treefile; }
 	return output;
 }
 
 function makecolors(){
-	if(model.colorscheme()=='rainbow'){
-   		colors = {'-':['#ccc','#fff'],'.':['#aaa','#fff'],'?':['#f00','#fff']};
-   	}
-   	else if(model.colorscheme()=='taylor'){
-   		colors = { "A":["","rgb(204, 255, 0)"], "R":["","rgb(0, 0, 255)"], "N":["","rgb(204, 0, 255)"], "D":["","rgb(255, 0, 0)"], "C":["","rgb(255, 255, 0)"], "Q":["","rgb(255, 0, 204)"], "E":["","rgb(255, 0, 102)"], "G":["","rgb(255, 153, 0)"], "H":["","rgb(0, 102, 255)"], "I":["","rgb(102, 255, 0)"], "L":["","rgb(51, 255, 0)"], "K":["","rgb(102, 0, 255)"], "M":["","rgb(0, 255, 0)"], "F":["","rgb(0, 255, 102)"], "P":["","rgb(255, 204, 0)"], "S":["","rgb(255, 51, 0)"], "T":["","rgb(255, 102, 0)"], "W":["","rgb(0, 204, 255)"], "Y":["","rgb(0, 255, 204)"], "V":["","rgb(153, 255, 0)"], "B":["","rgb(255, 255, 255)"], "Z":["","rgb(255, 255, 255)"], "X":["","rgb(255, 255, 255)"], "-":["#ccc","rgb(255, 255, 255)"], "*":["","rgb(255, 255, 255)"], ".":["#999","rgb(210, 210, 210)"], "?":["#f00","rgb(255, 255, 255)"] };
+	if(model.colorscheme()=='taylor'){
+   		colors = { "A":["","rgb(204, 255, 0)"], "R":["","rgb(0, 0, 255)"], "N":["","rgb(204, 0, 255)"], "D":["","rgb(255, 0, 0)"], "C":["","rgb(255, 255, 0)"], "Q":["","rgb(255, 0, 204)"], "E":["","rgb(255, 0, 102)"], "G":["","rgb(255, 153, 0)"], "H":["","rgb(0, 102, 255)"], "I":["","rgb(102, 255, 0)"], "L":["","rgb(51, 255, 0)"], "K":["","rgb(102, 0, 255)"], "M":["","rgb(0, 255, 0)"], "F":["","rgb(0, 255, 102)"], "P":["","rgb(255, 204, 0)"], "S":["","rgb(255, 51, 0)"], "T":["","rgb(255, 102, 0)"], "W":["","rgb(0, 204, 255)"], "Y":["","rgb(0, 255, 204)"], "V":["","rgb(153, 255, 0)"], "B":["","rgb(255, 255, 255)"], "Z":["","rgb(255, 255, 255)"], "X":["","rgb(255, 255, 255)"]};
    	}
    	else if(model.colorscheme()=='dna'){ colors = {"A":["","rgb(0,0,255)"],"T":["","rgb(255, 255, 0)"],"G":["","rgb(0, 255, 0)"],"C":["","rgb(255, 0, 0)"],"U":["","rgb(255, 255, 0)"]}; }
-   	for(var i=0;i<alphabet.length;i++){ //make colors for whole alphabet (+darker bg for masked symbols)
-   		var symbol = alphabet[i];
+   	colors['-']=['#ccc',"rgb(255,255,255)"];colors['.']=['#e3e3e3',"rgb(255,255,255)"];colors['?']=['#f00',"rgb(255,255,255)"];
+   	if(model.hasdot()) colors['-'][0] = "#999"; //darker del.
+   	for(var i=0;i<letters.length;i++){ //make colors for all letters/symbols (+darker bg for masked symbols)
+   		var symbol = letters[i];
    		var unmasked = i%2==0 ? true : false;
    		if(model.colorscheme()=='rainbow'){
-   			var color = unmasked ? rainbow(alphabet.length,i) : mixcolors(rainbow(alphabet.length,i-1),[100,100,100]);
+   			var color = unmasked ? rainbow(letters.length,i) : mixcolors(rainbow(letters.length,i-1),[100,100,100]);
    			if(!colors[symbol]){ colors[symbol] = ["",color]; }
    		}
    		else{
-   			if(!colors[symbol]){ 
-   				if(unmasked){ colors[symbol] = ["","rgb(200,200,200)"]; } //symbols outside of colorscheme: grey bg
-   				else{ colors[symbol] = ["",mixcolors(colors[alphabet[i-1]][1],[100,100,100])]; }
+   			if(!colors[symbol]){ //symbols outside of colorscheme: grey bg
+   				if(unmasked){ colors[symbol] = ["","rgb(200,200,200)"]; }
+   				else{ colors[symbol] = ["",mixcolors(colors[letters[i-1]][1],[100,100,100])]; }
    			}
    		}
    		var rgb = colors[symbol][1].match(/\d{1,3}/g);
@@ -514,35 +628,80 @@ function makecolors(){
    		if(!colors[symbol][0]){ colors[symbol][0] = fgcolor; }
    		
    		symbols[symbol] = { 'fgcolor' : colors[symbol][0], 'bgcolor' : colors[symbol][1] };
-   		symbols[symbol]['masked'] = unmasked ? alphabet[i+1] : symbol;
-   		symbols[symbol]['unmasked'] = unmasked ? symbol : alphabet[i-1];
-   	}
+   		symbols[symbol]['masked'] = unmasked ? letters[i+1] : symbol;
+   		symbols[symbol]['unmasked'] = unmasked ? symbol : letters[i-1];
+   	} //Result: symbols = {'A':{'fgcolor':'#ccc','bgcolor':'#fff','masked':'a','unmasked':'A'},'a':{maskedcolors,..}}
+}
+
+//Note: color palette: http://jsfiddle.net/k8NC2/1/  jalview color schemes
+function rainbow(numOfSteps, step, adjust){
+    //Generates vibrant, "evenly spaced" colours. Adapted from blog.adamcole.ca
+    var r, g, b;
+    var h = step / numOfSteps;
+    var i = ~~(h * 6);
+    var f = h * 6 - i;
+    var q = 1 - f;
+    switch(i % 6){
+        case 0: r = 1, g = f, b = 0; break;
+        case 1: r = q, g = 1, b = 0; break;
+        case 2: r = 0, g = 1, b = f; break;
+        case 3: r = 0, g = q, b = 1; break;
+        case 4: r = f, g = 0, b = 1; break;
+        case 5: r = 1, g = 0, b = q; break;
+    }
+    return 'rgb('+parseInt(r*255)+','+parseInt(g*255)+','+parseInt(b*255)+')';
+}
+
+function mixcolors(color,mix){
+	var rgb = color.match(/\d{1,3}/g);
+	var r = Math.floor((parseInt(rgb[0])+mix[0])/2);
+	var g = Math.floor((parseInt(rgb[1])+mix[1])/2);
+	var b = Math.floor((parseInt(rgb[2])+mix[2])/2);
+	return "rgb("+r+","+g+","+b+")";
 }
 
 var first = true;
 function redraw(zoom){
 	canvaspos = []; colflags = []; rowflags = []; //reset flags
-	lastselectionid = 0; activeid = false; $names = $("#names");
-	$("#seq div").each(function(){ //remove selection boxes
-		var id = $(this).attr('id') || '';
-		if(id.indexOf('selection')!=-1||id.indexOf('cross')!=-1){ $(this).remove(); }
-	});
+	lastselectionid = 0; activeid = false; $names = $("#names"); $treewrap = $("#treewrap");
+	$("#seq div[id*='selection'],#seq div[id*='cross']").remove(); //remove selection boxes
 	
 	var newheight = visiblerows().length==0 ? model.leafcount()*model.boxh() : visiblerows().length*model.boxh();
-	if(!zoom){ treewrap.css('height',newheight); $("#names svg").css('font-size',model.fontsize()+'px'); }
+	if(!zoom){ $treewrap.css('height',newheight); $("#names svg").css('font-size',model.fontsize()+'px'); }
 	if(first){//make tree and get visiblerows
 		maskedcols = []; //reset variables
 		counter = 0; treesvg = {}; Smits.Common.nodeIdIncrement = 0;
 		$label = $("#namelabel"); $labelspan = $("#namelabel span");
 		$("#tree").empty(); $names.empty();
-		wrap.css('left',0); seq.css('margin-top',0);
-		treewrap.css({top:0,height:newheight});
+		dom.wrap.css('left',0); dom.seq.css('margin-top',0);
+		$treewrap.css({top:0,height:newheight});
 		if(model.treesource()){
 			$("#notree").fadeOut(); $("#tree").css('box-shadow','none');
 			$("#treewrap").css('background-color','white');
-			treesvg = new Smits.PhyloCanvas(treedata, model.nameswidth(), treewrap.width(), newheight); 
+			treesvg = new Smits.PhyloCanvas(treedata, model.nameswidth(), $treewrap.width(), newheight);
+			var svg = $("#tree>svg,#names>svg");
+			svg.mousedown(function(e){ //handle nodedrag on tree
+				e.preventDefault();
+				var dragged = e.target.tagName;
+	  			if(dragged=='circle' || dragged=='tspan'){
+	  				var raphid = dragged=='tspan'? e.target.parentNode.raphaelid : e.target.raphaelid;
+	  				var svgid = dragged=='tspan'? 'svg2' : 'svg1';
+	  				var draggednode = treesvg.svg[svgid].getById(raphid).data('node');
+	  				$("#page").one('mouseup',function(){ $("#page").unbind('mousemove'); });
+	  				var startpos = {x:e.pageX,y:e.pageY}, dragmode = false, helper;
+					$("#page").mousemove(function(evt){
+						var dx = evt.pageX-startpos.x, dy = evt.pageY-startpos.y;
+	  					if(Math.sqrt(dx*dx+dy*dy)>7){
+	  						if(!dragmode){
+	  							helper = movenode('drag',draggednode,dragged);
+	  							dragmode = true;
+	  						}
+	  						helper.css({left:evt.pageX+15,top:evt.pageY-5});
+	  					}
+	  		}); } });
+
 		}
-		else{
+		else{ //no tree
 			$("#treewrap").css('background-color','transparent');
 			$("#notree").fadeIn(); $("#tree").css('box-shadow','-2px 0 2px #ccc inset');
 			$.each(names,function(name){
@@ -553,7 +712,7 @@ function redraw(zoom){
 						$label.css({
 							'font-size' : model.fontsize()+'px',
 							'top': nspan.offset().top+'px',
-							'left' : right.position().left-14+'px'
+							'left' : $("#right").position().left-14+'px'
 						});
 						$labelspan.css('margin-left',0-$names.innerWidth()+5+'px'); $labelspan.text(name);
 						$label.css('display','block'); setTimeout(function(){ $label.css('opacity',1) },50);
@@ -567,21 +726,22 @@ function redraw(zoom){
 				$names.append(nspan);
 			});
 		}
-   		setTimeout(function(){treewrap.fadeTo(300,1,'linear')},10);
+   		setTimeout(function(){$treewrap.fadeTo(300,1,'linear')},10);
    	}
    	
 	var newwidth = visiblecols().length*model.boxw();
 	if(zoom){//keep sequence positioned in center of viewport after zoom
-		seq.empty();
-		var oldwidth = parseInt(seq.css('width')); var oldheight = parseInt(seq.css('height'));
-		var left = ((newwidth/oldwidth)*(parseInt(wrap.css('left'))-(seqwindow.innerWidth()/2)))+(seqwindow.innerWidth()/2);
-		if(left>0){ left = 0; } else if (Math.abs(left)>newwidth-seqwindow.innerWidth()){ left = seqwindow.innerWidth()-newwidth; }
+		dom.seq.empty(); dom.seq.append('<div id="rborder" class="rowborder">');
+		var oldwidth = parseInt(dom.seq.css('width')); var oldheight = parseInt(dom.seq.css('height'));
+		var left = ((newwidth/oldwidth)*(parseInt(dom.wrap.css('left'))-(dom.seqwindow.innerWidth()/2)))+(dom.seqwindow.innerWidth()/2);
+		if(left>0){ left = 0; } else if (Math.abs(left)>newwidth-dom.seqwindow.innerWidth()){ left = dom.seqwindow.innerWidth()-newwidth; }
 		var visibleHeight = $("#left").height();
-		var top = ((newheight/oldheight)*(parseInt(seq.css('margin-top'))-(visibleHeight/2)))+(visibleHeight/2);
+		var top = ((newheight/oldheight)*(parseInt(dom.seq.css('margin-top'))-(visibleHeight/2)))+(visibleHeight/2);
 		if(top<0&&newheight>visibleHeight&&Math.abs(top)>newheight-visibleHeight){ top = visibleHeight-newheight; }//keep bottom edge grounded
 		if(top>0||newheight<visibleHeight){ top = 0; }//stick to top edge
-		wrap.css('left',Math.round(left)); seq.css('margin-top',Math.round(top));
-		treewrap.animate({height:newheight,top:Math.round(top)},500,'linear');
+		if(model.zoomlevel()<3){ $("#treewrap").addClass('minimal'); } else { $("#treewrap").removeClass('minimal'); }
+		dom.wrap.css('left',Math.round(left)); dom.seq.css('margin-top',Math.round(top));
+		$treewrap.animate({height:newheight,top:Math.round(top)},500,'linear');
 		if(model.treesource()){
 			$("#names svg").animate({'font-size':model.fontsize()},500,'linear');
 		}
@@ -589,15 +749,21 @@ function redraw(zoom){
 			$("#names span").css({'height':model.boxh()+'px','font-size':model.fontsize()+'px'});
 		}
 	}
-	seq.css({ 'width':newwidth, 'height':newheight });
+	dom.seq.css({ 'width':newwidth, 'height':newheight });
 	makeRuler();
 	makeCanvases(); makeImage();
 	if(first){ mCustomScrollbar(0,"easeOutCirc","auto","yes","yes",10); } else { $(window).trigger('resize'); }
 	first = false;
 }
 
+function refresh(e,hidemenu){ //redraw tree & sequence
+	if(e) e.stopPropagation();
+	if(hidemenu) $('html').click();//hidetooltip();
+	treesvg.refresh();
+};
+
 function makeCanvases(){
-	var tmpel,tmpcanv,letterw,maxletterw,fcanv;
+	var tmpel,tmpcanv,letterw,maxletterw,fcanv,roundcorners=false;
 	$.each(symbols,function(symbol,data){
 		tmpel = document.createElement('canvas');
 		tmpel.width = model.boxw();
@@ -605,30 +771,46 @@ function makeCanvases(){
 		tmpcanv = tmpel.getContext('2d');
 		tmpcanv.fillStyle = data.bgcolor;
 		if(model.zoomlevel()==1){ tmpcanv.fillRect(0,0,1,2); }
-		else{ tmpcanv.fillRect(1,1,tmpel.width-1,tmpel.height-1); }
-		if(model.fontsize() > 7){
-			var canvassymbol = symbol=='.' ? '-' : symbol; //masked gap
-			tmpcanv.font = model.fontsize()+"px monospace";
+		else{
+			if(roundcorners && model.zoomlevel()>4){
+				var x=1,y=1,w=tmpel.width-1,h=tmpel.height-1,r=parseInt(model.boxw()/5);
+				tmpcanv.beginPath();
+  				tmpcanv.moveTo(x+r, y);
+  				tmpcanv.arcTo(x+w, y, x+w, y+h, r);
+  				tmpcanv.arcTo(x+w, y+h, x, y+h, r);
+  				tmpcanv.arcTo(x, y+h, x, y, r);
+  				tmpcanv.arcTo(x, y, x+w, y, r);
+  				tmpcanv.closePath();
+  				tmpcanv.fill();
+			}
+			else tmpcanv.fillRect(1,1,tmpel.width-1,tmpel.height-1);
+		}
+		if(model.fontsize() > 7){ //draw characters
+			var canvassymbol = canvassymbols[symbol] || symbol;
+			tmpcanv.font = model.fontsize()+'px Courier';
 			tmpcanv.textAlign = 'center';
 			tmpcanv.textBaseline = 'middle';
 			tmpcanv.fillStyle = data.fgcolor;
-			if(data.fgcolor=="#eee"){
+			if(model.fontsize() > 12){ //font shadow
+			  if(data.fgcolor=="#eee"){
 				tmpcanv.shadowColor = "#111";
 				tmpcanv.shadowOffsetX = 0;
 				tmpcanv.shadowOffsetY = 1.5;
 				tmpcanv.shadowBlur = 1;
-			}
-			else if(data.fgcolor=="#333"){
+			  }
+			  else if(data.fgcolor=="#333"){
 				tmpcanv.shadowColor = "#fff";
 				tmpcanv.shadowOffsetX = 0;
 				tmpcanv.shadowOffsetY = -0.5;
 				tmpcanv.shadowBlur = 1;
-			}
+			  }
+			 }
 			tmpcanv.fillText(canvassymbol,tmpel.width/2+1,tmpel.height/2);
 		}
 		symbols[symbol]['canvas'] = tmpel;
+		if(model.zoomlevel()==10) symbols[symbol]['refcanvas'] = tmpel;
 	});
-	//$.each(symbols,function(i,data){$('#top').append(' ',data.canvas)});
+	//$.each(symbols,function(i,data){$('#top').append(' ',data.canvas)}); //Debug
 }
 
 var tmpc = 0;
@@ -639,19 +821,20 @@ function makeImage(target){
 		var tarr = target.split(':');
 		if(tarr[0]=='x'){ targetx = parseInt(tarr[1]); } else if(tarr[0]=='y'){ targety = parseInt(tarr[1]); }
 	}
-	if(!targetx){ targetx = wrap.position().left; }
-	if(!targety){ targety = parseInt(seq.css('margin-top')); }
+	if(!targetx){ targetx = $("#wrap").position().left; }
+	if(!targety){ targety = parseInt(dom.seq.css('margin-top')); }
 	var colstartpix = parseInt((0-targetx)/model.boxw());
 	var rowstartpix = parseInt((0-targety)/model.boxh());
 	var colstart = colstartpix-(colstartpix%colstep); //snap to (colstep-paced) tile grid
-	var colend = parseInt((seqwindow.innerWidth()-targetx)/model.boxw());
+	var colend = parseInt((dom.seqwindow.innerWidth()-targetx)/model.boxw());
 	if(colend>visiblecols().length){ colend = visiblecols().length; }
 	var rowstart = rowstartpix-(rowstartpix%rowstep); //snap to grid
-	var rowend = parseInt(((seqwindow.innerHeight()-ruler.outerHeight())-targety)/model.boxh());
+	var rowend = parseInt(((dom.seqwindow.innerHeight()-$("#ruler").outerHeight())-targety)/model.boxh());
 	if(rowend>visiblerows().length){ rowend = visiblerows().length; }
 	var rowdraws = [];
 	var canvascount = 0;
 	var totalcount = 0;
+	var $spinner = $("#spinner");
 	for(var row = rowstart; row<rowend; row+=rowstep){
 	  for(var col = colstart; col<colend; col+=colstep){
 		if($.inArray(row+'|'+col,canvaspos) == -1){ //canvas not yet made
@@ -664,7 +847,7 @@ function makeImage(target){
 			setTimeout(function(r,c){ return function(){
 				canvascount++;
 				var canvas = document.createElement('canvas');
-				var div = document.createElement('div');
+				var tile = $('<div class="tile">');
 				canvas.width = colstep*model.boxw();
 				canvas.height = rowstep*model.boxh();
 				var endrow = rowdraws[r+'|'+c].row+rowstep>visiblerows().length ? visiblerows().length : rowdraws[r+'|'+c].row+rowstep;
@@ -682,26 +865,29 @@ function makeImage(target){
 					}
 					rowdraws[r+'|'+c].canvasrow++;
 				}
-				$(div).css({'left': c*model.boxw()+'px', 'top': r*model.boxh()+'px'});
-				seq.append(div);
-				$(div).append(canvas);
-				//var now = new Date().getTime(); console.log('CANVAS drawn. id: '+r+'|'+c+' ('+(now-curstart)+'ms) from start: '+(now-start)+' ms');
+				tile.css({'left': c*model.boxw()+'px', 'top': r*model.boxh()+'px'});
+				dom.seq.append(tile);
+				tile.append(canvas);
 				rowdraws[r+'|'+c] = {};
-				setTimeout(function(){ $(div).fadeTo(300,1,'linear', function(){ //fadein new canvas and remove any covered canvas.
-							var pos1 = $(div).position(); var prevdivs = $(div).prevAll();
-							prevdivs.each(function(){ var pos2 = $(this).position(); if(pos1.left==pos2.left&&pos1.top==pos2.top){ $(this).remove(); }});
-						});},50);
-				if(canvascount==totalcount){ if(spinner.css('display')=='block' ){ setTimeout(function(){spinner.fadeOut(200);},100); } }
+				setTimeout(function(){ tile.css('opacity',1) },50);
+				setTimeout(function(){ //remove any covered canvas.
+					var pos1 = tile.position(); var prevdivs = tile.prevAll('.tile');
+					prevdivs.each(function(){
+						var pos2 = $(this).position(); 
+						if(pos1.left==pos2.left && pos1.top==pos2.top) $(this).remove(); 
+				}); },500);
+				if(canvascount==totalcount){ if($spinner.css('display')=='block' ){ setTimeout(function(){$spinner.fadeOut(200);},50); } }
 			}}(row,col),10);
 		}//make canvas	
 	  }//for cols
 	}//for rows
-	if(totalcount>2){ spinner.css({'display':'block','opacity':1}); }
+	if(totalcount>2){ $spinner.css({display:'block',opacity:1}); }
 }
 
 
 function makeRuler(){
-	ruler.empty();
+	var $ruler = $("#ruler");
+	$ruler.empty();
 	var tick = 10;
 	var tickw = tick*model.boxw()-4;
 	var k = '';
@@ -710,24 +896,24 @@ function makeRuler(){
 		var l = capindex*model.boxw()-7;
 		var colspan = ecol-scol;
 		var div = $('<div class="marker" style="left:'+l+'px">&#x25BC</div>');
-		div.mouseenter(function(e){ tooltip(e,'tooltip','Click to reveal '+colspan+' hidden columns.',div)});
+		div.mouseenter(function(e){ tooltip(e,'Click to reveal '+colspan+' hidden columns.',{target:div}) });
 		div.click(function(){
 			for(var c=scol;c<ecol;c++,capindex++){ visiblecols.splice(capindex,0,c); } 
 			hidetooltip(); redraw(); 
 		});
 		return div;
 	}
-	if(visiblecols()[0]!==0){ ruler.append(markerdiv(0,visiblecols()[0])); }
+	if(visiblecols()[0]!==0){ $ruler.append(markerdiv(0,visiblecols()[0])); }
 	for(var t=0;t<visiblecols().length-1;t++){
-		if((visiblecols()[t+1]-visiblecols()[t])!=1){ ruler.append(markerdiv(visiblecols()[t]+1,visiblecols()[t+1])); }
+		if((visiblecols()[t+1]-visiblecols()[t])!=1){ $ruler.append(markerdiv(visiblecols()[t]+1,visiblecols()[t+1])); }
 	  	if(t%tick==0){//make ruler tickmarks
 			k = t;
 			if(model.boxw()<4){ if(t%100==0){ if(t>=1000){ k = '<span>'+(t/1000)+'K</span>'; }else{ k = '<span>'+t+'</span>'; } }else{ k = '&nbsp;'; } }
-			ruler.append($('<span style="width:'+tickw+'px">'+k+'</span>'));
+			$ruler.append($('<span style="width:'+tickw+'px">'+k+'</span>'));
 		}
 	}
 	if(visiblecols()[visiblecols().length-1] != model.alignlen()-1){
-		ruler.append(markerdiv(visiblecols()[visiblecols().length-1]+1,model.alignlen()));
+		$ruler.append(markerdiv(visiblecols()[visiblecols().length-1]+1,model.alignlen()));
 	}
 }
 
@@ -739,245 +925,305 @@ function zoomout(){
 }
 
 
-//color palette: http://jsfiddle.net/k8NC2/1/  jalview color schemes
-function rainbow(numOfSteps, step, adjust){
-    //Generates vibrant, "evenly spaced" colours. Adapted from blog.adamcole.ca
-    var r, g, b;
-    var h = step / numOfSteps;
-    var i = ~~(h * 6);
-    var f = h * 6 - i;
-    var q = 1 - f;
-    switch(i % 6){
-        case 0: r = 1, g = f, b = 0; break;
-        case 1: r = q, g = 1, b = 0; break;
-        case 2: r = 0, g = 1, b = f; break;
-        case 3: r = 0, g = q, b = 1; break;
-        case 4: r = f, g = 0, b = 1; break;
-        case 5: r = 1, g = 0, b = q; break;
-    }
-    /*var lc = "#333";
-    if(b==1&&r<0.3&&g<0.4){ lc = "#ddd"; } //dark background
-    if(adjust){ r=(r+2)/3; g=(g+2)/3; b=(b+2)/3; lc="#333"; }//lighten
-    var c = "#" + ("00" + (~ ~(r * 255)).toString(16)).slice(-2) + ("00" + (~ ~(g * 255)).toString(16)).slice(-2) + ("00" + (~ ~(b * 255)).toString(16)).slice(-2);
-    return [lc,c];*/
-    return 'rgb('+parseInt(r*255)+','+parseInt(g*255)+','+parseInt(b*255)+')';
+function movenode(drag,movednode,movedtype){ //Create 'move node' mode (tree branches accept click/drop)
+	if(!movednode) return false;
+	$("#left").addClass('dragmode');
+	movednode.highlight();
+	setTimeout(function(){
+		tooltip('','Move node: '+(drag?'drop node to':'click on')+' target branch or node.',{target:{startx:200,starty:100},arrow:'bottom',autohide:6000});
+	}, 400);
+	if(drag){
+		$("#right").addClass('dragmode');
+		setTimeout(function(){
+			tooltip('','Delete node: drop node here.',{target:{startx:900,starty:105},arrow:'bottom',autohide:6000});
+		}, 400);
+		var drawtimer = 0, maxscroll = ($("#seq").height()+10)-($("#left").innerHeight()+3);
+	  	var vertdragger = $("#verticalDragger .dragger");
+	  	var draggerscale = maxscroll/($("#verticalDragger").height()-vertdragger.height());
+
+		function loop(rate){ //treescroll
+			var scrollto = parseInt($('#treewrap').css('top'))+rate;
+	  		if(scrollto > 0) scrollto = 0; else if(Math.abs(scrollto) > maxscroll) scrollto = 0-maxscroll;
+    		$('#treewrap').stop(1).animate({top:scrollto}, 1000, 'linear', function(){ loop(rate) });
+    		dom.seq.stop(1).animate({marginTop: scrollto}, 1000, 'linear');
+    		vertdragger.stop(1).animate({top: (0-scrollto)/draggerscale}, 1000, 'linear');
+		}        
+
+		function stop(){ $('#treewrap,#seq,#verticalDragger .dragger').stop(1); clearInterval(drawtimer); }
+
+	  	$.each(['up','down'],function(i,dir){ //set up hoverable scrollbuttons
+	  		var scrolldiv = $('<div class="treescroll '+dir+'" style="width:'+($("#right").offset().left-30)+'px">'+(dir=='up'?'\u25B2':'\u25BC')+'</div>');
+	  		$("#page").append(scrolldiv);
+	  		var baseline = scrolldiv.offset().top;
+	  		scrolldiv.mouseenter(function(){ drawtimer = setInterval(function(){ makeImage() }, 2000) });
+	  		scrolldiv.mousemove(function(event){
+	  			var rate = dir=='up'? scrolldiv.outerHeight()-(event.pageY-baseline) : 0-(event.pageY-baseline);
+	  			if(rate%2 != 0) loop(rate*10);
+	  		});
+	  		scrolldiv.mouseleave(function(){ stop() });
+	  	});
+	  	if(movedtype=='circle'){ //add drag helper (node preview)
+	  		var helper = $(movednode.makeCanvas()).attr('id','draggedtree');
+	  	}
+	  	else if(movedtype=='tspan'){
+	  		var helper = $('<div id="draggedlabel">'+movednode.name+'</div>');
+	  	}
+	  	$("#page").append(helper);
+	}//drag
+	$("body").one('mouseup',function(evnt){
+		var targettype = evnt.target.tagName;
+	  	if(targettype=='circle'||targettype=='tspan'||(targettype=='line'&&$(evnt.target).attr('class')=='horizontal')){
+	  		var raphid = targettype=='tspan'? evnt.target.parentNode.raphaelid : evnt.target.raphaelid;
+	  		var svgid = targettype=='tspan'? 'svg2' : 'svg1';
+	  		var targetnode = treesvg.svg[svgid].getById(raphid).data('node');
+	  		if(movednode && targetnode){ movednode.move(targetnode); refresh(); }
+	  	}
+	  	else if (drag && targettype=='DIV' && evnt.target.id=='treebin'){ if(movednode) movednode.remove(); refresh(); }
+	  	movednode.unhighlight();
+	  	$("#left,#right").removeClass('dragmode');
+	  	if(drag){ helper.remove(); $("div.treescroll").remove(); }
+	  	$("#page").unbind('mousemove'); hidetooltip();
+	 });
+	 if(drag) return helper;
 }
 
-function mixcolors(color,mix){
-	var rgb = color.match(/\d{1,3}/g);
-	var r = Math.floor((parseInt(rgb[0])+mix[0])/2);
-	var g = Math.floor((parseInt(rgb[1])+mix[1])/2);
-	var b = Math.floor((parseInt(rgb[2])+mix[2])/2);
-	return "rgb("+r+","+g+","+b+")";
-}
 
-function tooltip(evt,type,title,node,data,svg){
-	title = title.replace(/\#/g,'');
-	if(type==''||type=='tooltip'){//generate tooltip divs
+function tooltip(evt,title,options){ //make tooltips & pop-up menus
+	if(!options) options = {};
+	if(typeof(title)=='string') title = title.replace(/#/g,'');
+	if(options.tooltip){
+		var tipdiv = $(options.tooltip);
+		var tiparrow = $(".arrow",tipdiv);
+		var tiptitle = $(".tooltiptitle",tipdiv);
+		var tipcontentwrap = $(".tooltipcontentwrap",tipdiv);
+		var tipcontent = $(".tooltipcontent",tipdiv);
+		tipdiv.css('display','block');
+	} else { //generate new tooltip
 		var tipdiv = $('<div class="tooltip"></div>');
 		var tiparrow = $('<div class="arrow"></div>');
 		var tiptitle = $('<div class="tooltiptitle"></div>');
-		var tipcontent = $('<div class="tooltipcontentwrap"></div>');
-		var contdiv = $('<div class="tooltipcontent"></div>');
-		contdiv.append(tipcontent);
-		tipdiv.append(tiparrow,tiptitle,contdiv);
-		$('body').append(tipdiv);
-		contdiv.css({'position':'relative','top':'0'});
+		var tipcontentwrap = $('<div class="tooltipcontentwrap"></div>');
+		var tipcontent = $('<div class="tooltipcontent"></div>');
+		tipcontentwrap.append(tipcontent);
+		tipdiv.append(tiparrow,tiptitle,tipcontentwrap);
+		var box = options.container || 'body';
+		$(box).append(tipdiv);
 	}
-	else{
-		var tipid = type.indexOf('2')!=-1 ? '#tooltip2' : '#tooltip';
-		var tipdiv = $(tipid);
-		var tiptitle = $(tipid+' .tooltiptitle');
-		var tipcontent = $(tipid+' .tooltipcontentwrap');
-		var tiparrow = $(tipid+' .arrow');
-	}
-	if(tiptitle.css('display')=='none'){ tiptitle.css('display','block'); }
-	tipcontent.text('');
-	if(!svg){ //tooltip/menu placement
-		tipdiv.css({'height':'auto','width':'auto'});
-    	if(type.indexOf('2')!=-1){
-    		if(node){
-    			if(node=='namelabel'){ 
-    				var x = $("#namelabel").offset().left+($("#namelabel").innerWidth()*0.2); 
-    				var y = $("#namelabel").offset().top+$("#namelabel").innerHeight()+10;
-    			}
-    			else if(node.node){
-    				var x = $(node.node).offset().left+($("#names").innerWidth()*0.2);
-    				var y = $(node.node).offset().top+$("#namelabel").innerHeight()+10; 
-    			}
-    			//if(type.indexOf('right')!=-1){ var x = $(node.node).offset().left+26; }
-    		} else { var x = evt.clientX-15; var y = evt.clientY+25; }
-    		if(type.indexOf('right')!=-1){ tiparrow.css({'left':(tipdiv.innerWidth()/2)-8}); }
-    	} else {
-    		if(type==''||type=='tooltip'){ tiparrow.css('display','none'); }else{ tiparrow.css('display','block'); }
-    		if(node){
-    			if(node.edgeCircleHighlight){
-    				var x = $(node.edgeCircleHighlight.node).offset().left+25;
-    				var y = $(node.edgeCircleHighlight.node).offset().top-6;
-    			} else {
-    				if(node.tagName=='LI'){//submenu
-    					var x = $(node).innerWidth()-5;
-    					var y = $(node).position().top-3;
-    				}
-    				else{
-    					var x = $(node).offset().left+$(node).innerWidth();
-    					var y = $(node).offset().top+20;
-    				}
-    			}
-    		} else { var x = evt.clientX+5; var y = evt.clientY; }
+	if(options.id) tipdiv.attr('id',options.id);
+	if(!title) tiptitle.css('display','none');
+	
+	if(options['arrow']){ //add pointer
+		var arr = options.arrow;
+		tipdiv.addClass(arr+'arrow');
+	} else var arr = false;
+	if(options.style) tipdiv.addClass(options.style);
+	
+	var node = options.target || false;
+	if(node){ //tooltip placement
+    	if(node.edgeCircleHighlight){
+    		var x = $(node.edgeCircleHighlight.node).offset().left+25;
+    		var y = $(node.edgeCircleHighlight.node).offset().top-7;
+    	} 
+    	else if(!isNaN(node.pageX)||!isNaN(node.startx)){ //place as seqinfo tooltip
+    		var boxoffset = options.container? $(options.container).offset() : 0;
+    		var x = !isNaN(node.startx)? node.startx : node.clientX-boxoffset.left;
+    		var y = !isNaN(node.starty)? node.starty : node.clientY-boxoffset.top;
+    		node.height = !isNaN(node.startx)? model.boxh() : 0;
+    		node.width = !isNaN(node.starty)? model.boxw() : 0;
+    		if(arr=='left' && options.container=="#seq"){ x += node.width+13; y += (node.height/2)-11; }
     	}
-    	tipdiv.css({left:x,top:y});
-	}
-    if(data){ //pop-up menu
-      if(svg){ //menu for tree (after a node click)
-    	tiptitle.html(title+'  <span class="right"><span>\u2263</span>'+node._countAllChildren+' <span>\u2262</span>'+node._countAllHidden+'</span>');
-    	tipdiv.css('height',tipdiv.innerHeight()+'px');
-    	var ul = document.createElement('ul');
-    	$.each(node.children,function(i,child){
-    		var li = document.createElement('li');
-    		var vis = child.visibility=='visible' ? true : false;
-    		var litxt = vis ? 'Hide ' : 'Show ';
-    		if (child.type == 'ancestral'){ litxt += 'ancestral sequence'; var icon=vis?'\u233F':'\u22EF'; }
-    		else {
-    			litxt += i==0 ? 'upper ' : 'lower ';
-    			if(child.type=='stem'){ litxt += 'subtree';  var icon=vis?'\u2209':'\u22F2'; }else{ litxt += 'sequence'; var icon=vis?'\u233F':'\u2212'; }
-    		}
-    		$(li).text(icon+' '+litxt);
-    		$(li).click(function(e){
-    			$('#tooltip').css('display','none');
-    			child.hideToggle(); 
-				svg.svg1.clear();
-				svg.svg2.clear();
-				Smits.PhyloCanvas.Render.Phylogram(svg,data);
-				redraw();
-			});
-			$(ul).append(li);
-    	});
-    	tipcontent.append(ul); //treemenu slidedown
-    	tipdiv.animate({'height':'+='+tipcontent.innerHeight()},800,"easeOutElastic");
-      }
-      else{ //menu for canvas
-      	tipdiv.addClass('canvasmenu');
-      	var ul = document.createElement('ul');
-      	var hassubmenu = false;
-    	$.each(data,function(txt,obj){
-    		var li = document.createElement('li');
-    		if(typeof(obj)=='object'){ //nested menu
-    			$(li).click(obj['click']);
-    			if(obj['submenu']){//submenu
-    				hassubmenu = true;
-    				$(li).html(txt+'<span style="right:3px" class="right">\u25B8</span>');
-    				$(li).mouseenter(function(evt){ tooltip(evt,'','',li,obj['submenu'])}); 
-    			} else { $(li).html(txt); }
-    			if(obj['mouseover']){ $(li).mouseenter(obj['mouseover']); }
-    			if(obj['mouseout']){ $(li).mouseleave(obj['mouseout']); }
+    	else {
+    		if(node.tagName=='LI'){ //place as submenu
+    			var x = $(node).innerWidth()-5;
+    			var y = $(node).position().top-3;
     		}
     		else{
-    			$(li).html(txt);
-    			$(li).click(obj);
-			}
-			$(ul).append(li);
+    			var x = $(node).offset().left+15;
+    			var y = $(node).offset().top+15;
+    			if($(node).hasClass('svgicon')){ x+=20; y-=18; }
+    			if(!arr) y+= options.height||$(node).height();
+    		}
+    	}
+    	if(arr=='top') y+=(node.height||$(node).height())+9;
+    } else { var x = evt.pageX+10; var y = evt.pageY+10; }
+    var rightedge = $('body').innerWidth()-200;
+    if(!options.container && x > rightedge) x = rightedge;
+    if(!options.svg) tipdiv.css({left:parseInt(x),top:parseInt(y)});
+    		
+    if(options.data){ //generate pop-up menu
+      if(options.svg && node){ //tree node popup menu
+    	var nodetitle = $('<span class="right">'+(node._countAllHidden?' <span class="svgicon" title="Hidden leaves">'+svgicon('hide')+'</span>'+node._countAllHidden:'')+'</span>');
+    	var nodeicon = $('<span class="svgicon">'+svgicon('info')+'</span>').css({'margin-left':'10px', 'padding-right':0,cursor:'pointer'});
+    	nodeicon.mouseenter(function(e){ //node info
+    		var nodeul = $('<ul>'); if(node.children.length) nodeul.append('<li>Visible leaves: '+node._countAllChildren+'</li>');
+    		if(node._countAllHidden) nodeul.append('<li>Hidden leaves: '+node._countAllHidden+'</li>');
+    		nodeul.append('<li>Branch length: '+node.len+'</li>','<li>Length from root: '+node.lenFromRoot+'</li>','<li>Levels from root: '+node.level+'</li>');
+    		if(node.confidence) nodeul.append('<li>Branch support: '+node.confidence+'</li>');
+    		var nodetip = tooltip(e,'',{target:nodeicon,data:nodeul[0],arrow:'left',style:'nomenu'});
+    		nodeicon.one('mouseleave',function(){ hidetooltip(nodetip) });
     	});
-    	tipcontent.append(ul);
-    	if(title){ tiptitle.text(title); }else{ tiptitle.css('display','none'); $(ul).css('border-top','none');}
-    	if(hassubmenu){ tipdiv.css('width',tipdiv.innerWidth()+13); }//extra width for arrow
-    	if(node.tagName == 'LI'){//submenu
-    		$(node).append(tipdiv);
-    		$(node).mouseleave(function(e){ hidetooltip(tipdiv); $(node).unbind('mouseout'); }); 
-    	}
-    	var rightedge = seqwindow.offset().left+seqwindow.innerWidth()-300;
-    	if(x > rightedge){ tipdiv.css("left",rightedge); }
-      	$('html').click(function(){ hidetooltip(); $('html').unbind('click'); });
-      	tipdiv.fadeIn(200);
-     }
-   }else{ //tooltip
-    	if(type=='3'){//fix tooltip width after a tree node click
-    		var testhtml = node.children[1].visibility=='visible' ? '\u233F Hide ':'\u22EF Show ';
-    		tiptitle.html(testhtml+'ancestral sequence'); //testcontent to calculate maxwidth
-    		var width = tipdiv.innerWidth()-2;
-    		tiptitle.text('');
-    		tiptitle.text(title);
-    		var maxwidth = width > tipdiv.innerWidth() ? width : tipdiv.innerWidth();
-    		tipdiv.css('width',maxwidth);
-    	}
+    	nodetitle.append(nodeicon);
     	tiptitle.html(title);
-    	if(type=='tooltip'&&node){
-    		var rightedge = seqwindow.offset().left+seqwindow.innerWidth()-200;
-    		if(x > rightedge){ tipdiv.css("left",rightedge); }
-    		node.mouseleave(function(){ hidetooltip(tipdiv); });
-    	}//hide mousehover tooltip
-    	else { $('html').mousedown(function(){ hidetooltip(); $('html').unbind('mousedown'); }); }
-    	tipdiv.fadeIn(200,function(){if(tipdiv.css('opacity')!=1){tipdiv.css('opacity',1);}});
-    	if(type!='3'){ setTimeout(function(){tipdiv.fadeOut(200)},3000); }//autohide info tooltips
+    	tiptitle.append(nodetitle);
+    	var ul = $('<ul>');
+    	var hideli = $('<li class="arr"><span class="svgicon" title="Collapse node and its children">'+svgicon('hide')+'</span>Hide this node <span class="right">\u25B8</span></li>');
+    	hideli.click(function(){ node.hideToggle(); refresh('','menu'); });
+    	var hidemenu = {};
+    	$.each(node.children,function(i,child){ //child nodes submenu
+    		if (child.type == 'ancestral') return true; //skip anc.
+    		var litxt = '<span class="svgicon" title="(Un)collapse a child node">'+(i==0?svgicon('upper'):svgicon('lower'))+'</span>'+(child.hidden?'Show ':'Hide ')+(i==0?'upper ':'lower ')+' child';
+    		hidemenu[litxt] = { click: function(e){ child.hideToggle(); refresh(e,'menu'); } };
+    		if(child.children.length && child.hidden){ //preview hidden children
+    			var createpreview = function(){ //create treepreview on the fly
+    				var preview = $('<span style="margin-left:5px" class="svgicon">'+svgicon('view')+'</span>');
+    				var ptip = '';
+    				preview.mouseenter(function(e){
+    					var pcanvas = child.makeCanvas();
+    					pcanvas.style.borderRadius = '2px';
+    					ptip = tooltip(e,'',{target:preview,data:pcanvas,arrow:'left'});
+    					preview.one('mouseleave',function(){ hidetooltip(ptip); });
+    				});
+    				return preview;
+    			}
+    			hidemenu[litxt]['append'] = createpreview;
+    		}
+    	});
+    	hidemenu['<span class="svgicon" title="Uncollapse all child nodes">'+svgicon('children')+'</span>Show all children'] = function(e){ node.showSubtree(); refresh(e,'menu'); };
+    	hideli.mouseenter(function(evt){ tooltip(evt,'',{target:hideli[0],data:hidemenu}); });
+    	var ancnode = node.children[node.children.length-2];
+    	if(ancnode.type=='ancestral'){ //ancestral nodes submenu
+    		var h = ancnode.hidden? 'Show':'Hide';
+    		var ancli = $('<li class="arr"><span class="svgicon" title="'+h+' ancestral sequence">'+svgicon('ancestral')+'</span>'+h+' ancestral seq. <span class="right">\u25B8</span></li>');
+    		ancli.click(function(){ ancnode.hideToggle(); refresh(); });
+    		var ancmenu = {};
+    		ancmenu['<span class="svgicon" title="Show ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Show subtree ancestors'] = function(e){ node.showSubtree('anc'); refresh(e,'menu'); };
+    		ancmenu['<span class="svgicon" title="Hide ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Hide subtree ancestors'] = function(e){ node.showSubtree('anc','hide'); refresh(e,'menu'); };
+    		ancli.mouseenter(function(evt){ tooltip(evt,'',{target:ancli[0],data:ancmenu}); });
+    	} else var ancli = '';
+    	var swapli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Swap places of child nodes">'+svgicon('swap')+'</span>Swap children</li>');
+    	swapli.click(function(){ node.swap(); refresh(); });
+    	var moveli = $('<li><span class="svgicon" title="Graft this node to another branch in the tree">'+svgicon('move')+'</span>Move node</li>');
+    	moveli.click(function(){ movenode('',node,'circle'); });
+    	var rerootli = $('<li><span class="svgicon" title="Place this node as the tree outgroup">'+svgicon('root')+'</span>Place root here</li>');
+    	rerootli.click(function(){ node.reRoot(); refresh(); });
+    	var remli = $('<li><span class="svgicon" title="Remove this node and its children from the tree">'+svgicon('trash')+'</span>Remove node</li>');
+    	remli.click(function(){ node.remove(); refresh(); });
+    	var expli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Export this subtree in newick format">'+svgicon('file')+'</span>Export data</li>');
+    	expli.click(function(){ console.log(node.write()); hidetooltip(tipdiv); });
+    	ul.append(hideli,ancli,swapli,moveli,rerootli,remli,expli);
+    	tipcontent.append(ul);
+    	tipcontentwrap.css('height',tipcontent.innerHeight()+'px'); //slidedown
+      }
+      else{ //general pop-up menu
+      	if(options.data.tagName) tipcontent.append(options.data); //insert DOM element
+      	else{ //list-type menu
+      		var ul = $('<ul>');
+      		var hassubmenu = false;
+    		$.each(options.data,function(txt,obj){
+    			var li = $('<li>');
+	    		if(typeof(obj)=='object'){ //nested menu
+    				li.click(obj['click']);
+    				if(obj['submenu']){//submenu
+    					li.html(txt+'<span class="right">\u25B8</span>');
+    					li.addClass('arr');
+    					li.mouseenter(function(evt){ tooltip(evt,'',{target:li[0],data:obj['submenu']}); }); 
+	    			} else { li.html(txt); }
+    				if(obj['mouseover']){ li.mouseenter(obj['mouseover']); }
+    				if(obj['mouseout']){ li.mouseleave(obj['mouseout']); }
+    				if(obj['append']){ li.append(obj['append']); }
+    			}
+	    		else{
+    				li.html(txt);
+    				li.click(obj);
+				}
+				ul.append(li);
+    		});
+    		tipcontent.append(ul);
+	    	if(title){ tiptitle.text(title); }else{ tiptitle.css('display','none'); ul.css('border-top','none'); }
+    		if(node && node.tagName == 'LI'){//submenu
+    			$(node).append(tipdiv);
+		   		$(node).one('mouseleave',function(){ hidetooltip(tipdiv); }); 
+    		}
+      		$('html').one('click', function(){ hidetooltip(); if(node.treenode) node.treenode.unhighlight(); });
+     	}
+   	  }
    }
+   else{ //tooltip
+    	tiptitle.empty().append(title);
+    	if(node.nodeType) $(node).mouseleave(function(){ hidetooltip(tipdiv); });
+    	else if(!node.edgeCircleHighlight&&!options.nohide) setTimeout(function(){ hidetooltip(tipdiv) },options.autohide||3000); //self-hide
+   }
+   if(arr=='top'||arr=='bottom'){
+   		var adj = tipdiv.innerWidth()/2; 
+   		if(node) adj-=(node.width||$(node).innerWidth())/2; 
+   		tipdiv.css('left','-='+adj);
+   		if(arr=='bottom') tipdiv.css('top','-='+(tipdiv.innerHeight()+19));
+   }
+   tipdiv.addClass('opaque');
    return tipdiv;
 }
 
-function hidetooltip(tooltip){
-	tooltip = tooltip || '';
-	if(typeof(tooltip)=='object'){ $(tooltip).fadeOut(200,function(){$(tooltip).remove()}); }
-	else if (tooltip==''){
-		$("div.tooltip").each(function(){
-			if(this.id == ''){ $(this).fadeOut(200,function(){ $(this).remove(); }); }
-			//else{ $('html').trigger('click'); }
-		});
-		if(activeid){
-	  		$('#selection'+activeid+',#vertcross'+activeid+',#horicross'+activeid).css({'border-color':'','color':''});
-			activeid = false; 
+function hidetooltip(tooltip,exclude){
+	tooltips = tooltip&&!exclude ? $(tooltip) : $("div.tooltip");
+	if(exclude) tooltips = tooltips.not(tooltip);
+	tooltips.each(function(){
+		var tip = $(this);
+		tip.removeClass('opaque');
+		if(tip.attr('id')){ 
+			setTimeout(function(){
+				tip.css('display','none');
+				$(".tooltipcontent",tip).empty(); 
+				if($(".tooltipcontentwrap",tip).hasClass('hidden')) $(".tooltipcontentwrap",tip).css('height',0); 
+			},300);
 		}
-	}
-	else{
-		if(tooltip.indexOf('2')!=-1){ $('#tooltip2').fadeOut(200); }
-		else { 
-			if($('#tooltip').css('display')!='none'){
-				$('#tooltip').fadeOut(200,function(){ $('#tooltip .tooltipcontentwrap').text(''); });
-			} else { $('#tooltip .tooltipcontentwrap').text(''); }
-		}
-	}
+		else setTimeout(function(){ tip.remove(); },400);
+	});
 }
 
-function selectionsize(e,id,type){
-	if(typeof(type)=='undefined'){ var type = 'rb' }
-	else if(typeof(type)=='object'&&type.x&&type.y){//type=mouse startpos
+function selectionsize(e,id,type){ //make or resize a sequence selection box
+	if(typeof(type)=='undefined'){ var type = 'rb', start = {}; }
+	else if(typeof(type)=='object'&&type.x&&type.y){ //type = mouse startpos{x,y}
 		var dx = e.pageX-type.x; var dy = e.pageY-type.y;
-		if(Math.sqrt(dx*dx+dy*dy)<10){ return; }
-		else{ type = 'rb' }
+		if(dx<10||dy<10){ return; }
+		else{ var start = {x:type.x,y:type.y}, type = 'rb'; }
 	}
-	if($("#selection"+id).length==0){//selectionbox needs to be created
-		seq.append('<div id="selection'+id+'" class="selection"><div class="description"></div><div class="ltresize"></div><div class="rbresize"></div></div>\
+	if($("#selection"+id).length==0){//create selectionbox
+		dom.seq.append('<div id="selection'+id+'" class="selection"><div class="description"></div><div class="ltresize"></div><div class="rbresize"></div></div>\
 			<div id="vertcross'+id+'" class="selectioncross"><div class="lresize"></div><div class="rresize"></div></div>\
 			<div id="horicross'+id+'" class="selectioncross"><div class="tresize"></div><div class="bresize"></div></div>');
-		var x = e.pageX-seq.offset().left-5;
+		var x = (start.x||e.pageX)-dom.seq.offset().left-2;
 		x = x-(x%model.boxw());
-		var y = e.pageY-seq.offset().top;
+		var y = (start.y||e.pageY)-dom.seq.offset().top;
 		y = y-(y%model.boxh());
 		if(x<0){ x=0; } if(y<0){ y=0; }
 		$("#selection"+id).css({'left':x,'top':y,'width':model.boxw(),'height':model.boxh(),'display':'block'});
-		$("#vertcross"+id).css({'left':x,'top':'0','width':model.boxw(),'height':seq.innerHeight(),'display':model.selmode()=='columns'?'block':'none'});
-		$("#horicross"+id).css({'left':'0','top':y,'width':seq.innerWidth(),'height':model.boxh(),'display':model.selmode()=='rows'?'block':'none'});
-		$("#selection"+id).mouseenter(function(){ $("#selection"+id+" div.rbresize, #selection"+id+" div.ltresize").css('opacity','1'); });
-		$("#selection"+id).mouseleave(function(){ $("#selection"+id+" div.rbresize, #selection"+id+" div.ltresize").css('opacity','0'); });
-		$("#vertcross"+id).mouseenter(function(){ $("#vertcross"+id+" div.lresize, #vertcross"+id+" div.rresize").css('opacity','1'); });
-		$("#vertcross"+id).mouseleave(function(){ $("#vertcross"+id+" div.lresize, #vertcross"+id+" div.rresize").css('opacity','0'); });
-		$("#horicross"+id).mouseenter(function(){ $("#horicross"+id+" div.tresize, #horicross"+id+" div.bresize").css('opacity','1'); });
-		$("#horicross"+id).mouseleave(function(){ $("#horicross"+id+" div.tresize, #horicross"+id+" div.bresize").css('opacity','0'); });
-		$("#selection"+id+" div.rbresize").mousedown(function(){
-			seqwindow.mousemove(function(evt){ selectionsize(evt,id,'rb'); });
-		});
-		$("#selection"+id+" div.ltresize").mousedown(function(){
-			seqwindow.mousemove(function(evt){ selectionsize(evt,id,'lt'); });
-		});
-		$("#vertcross"+id+" div.rresize").mousedown(function(){
-			seqwindow.mousemove(function(evt){ selectionsize(evt,id,'r'); });
-		});
-		$("#vertcross"+id+" div.lresize").mousedown(function(){
-			seqwindow.mousemove(function(evt){ selectionsize(evt,id,'l'); });
-		});
-		$("#horicross"+id+" div.bresize").mousedown(function(){
-			seqwindow.mousemove(function(evt){ selectionsize(evt,id,'b'); });
-		});
-		$("#horicross"+id+" div.tresize").mousedown(function(){
-			seqwindow.mousemove(function(evt){ selectionsize(evt,id,'t'); });
+		$("#vertcross"+id).css({'left':x,'top':'0','width':model.boxw(),'height':dom.seq.innerHeight(),'display':model.selmode()=='columns'?'block':'none'});
+		$("#horicross"+id).css({'left':'0','top':y,'width':dom.seq.innerWidth(),'height':model.boxh(),'display':model.selmode()=='rows'?'block':'none'});
+		dom.seqwindow.mouseup(function(){ //attach resize handles
+			$("#selection"+id).mouseenter(function(){ $("#selection"+id+" div.rbresize, #selection"+id+" div.ltresize").css('opacity','1'); });
+			$("#selection"+id).mouseleave(function(){ $("#selection"+id+" div.rbresize, #selection"+id+" div.ltresize").css('opacity','0'); });
+			$("#vertcross"+id).mouseenter(function(){ $("#vertcross"+id+" div.lresize, #vertcross"+id+" div.rresize").css('opacity','1'); });
+			$("#vertcross"+id).mouseleave(function(){ $("#vertcross"+id+" div.lresize, #vertcross"+id+" div.rresize").css('opacity','0'); });
+			$("#horicross"+id).mouseenter(function(){ $("#horicross"+id+" div.tresize, #horicross"+id+" div.bresize").css('opacity','1'); });
+			$("#horicross"+id).mouseleave(function(){ $("#horicross"+id+" div.tresize, #horicross"+id+" div.bresize").css('opacity','0'); });
+			$("#selection"+id+" div.rbresize").mousedown(function(){
+				dom.seqwindow.mousemove(function(evt){ selectionsize(evt,id,'rb'); });
+			});
+			$("#selection"+id+" div.ltresize").mousedown(function(){
+				dom.seqwindow.mousemove(function(evt){ selectionsize(evt,id,'lt'); });
+			});
+			$("#vertcross"+id+" div.rresize").mousedown(function(){
+				dom.seqwindow.mousemove(function(evt){ selectionsize(evt,id,'r'); });
+			});
+			$("#vertcross"+id+" div.lresize").mousedown(function(){
+				dom.seqwindow.mousemove(function(evt){ selectionsize(evt,id,'l'); });
+			});
+			$("#horicross"+id+" div.bresize").mousedown(function(){
+				dom.seqwindow.mousemove(function(evt){ selectionsize(evt,id,'b'); });
+			});
+			$("#horicross"+id+" div.tresize").mousedown(function(){
+				dom.seqwindow.mousemove(function(evt){ selectionsize(evt,id,'t'); });
+			});
 		});
 		lastselectionid++;
 	}
@@ -1027,7 +1273,7 @@ function selectionsize(e,id,type){
 	}
 }
 
-function registerselections(id){//set flags in selection vectors
+function registerselections(id){//set flags in seq. selection vectors
 	colflags = []; rowflags=[]; selections = [];
 	var selector = id ? '#selection'+id : 'div[id^="selection"]';
 	$(selector).each(function(){
@@ -1048,7 +1294,7 @@ function clearselection(id){
 	else{ $("#seq div.selection").each(function(){ id = this.id.substr(9); $("#selection"+id).remove(); $("#vertcross"+id).remove(); $("#horicross"+id).remove(); }); }
 }
 
-function toggleselection(type){
+function toggleselection(type){ //toggle row/column selection
 	if(type=='default'){ toggleselection('hide rows'); type='hide columns'; }
 	else if(type=='columns'){ toggleselection('hide rows'); type='show columns'; }
 	else if(type=='rows'){ toggleselection('show rows'); type='hide columns'; }
@@ -1058,29 +1304,38 @@ function toggleselection(type){
 	}); 
 }
 
-function seqinfo(e){
-	var x = e.pageX-seq.offset().left-2;
+function seqinfo(e){ //character info tooltip
+	if(!e.pageX||!e.pageY) return false;
+	var x = e.pageX-dom.seq.offset().left-2;
 	x = parseInt(x/model.boxw());
-	var y = e.pageY-seq.offset().top-2;
+	var y = e.pageY-dom.seq.offset().top-2;
 	y = parseInt(y/model.boxh());
 	if(x<0){ x=0; } if(y<0){ y=0; }
 	var col = visiblecols()[x]; var rowid = visiblerows()[y];
-	var suppl = col==x ? '' : ' (col '+(col+1)+' if uncollapsed)';
+	if(!sequences[rowid]) return false;
+	var suppl = col==x ? '' : '<br>(column '+(col+1)+' if uncollapsed)';
+	var seqpos = sequences[rowid].slice(0,col+1).join('').replace(/[_\-.:]/g,'').length;
 	var symb = typeof(sequences[rowid][col])=='undefined' ? '' : sequences[rowid][col];
-	var name = typeof(leafs[rowid])=='undefined' ? '' : '<br>'+leafs[rowid].name;
-	return '<span style="color:orange">'+symb+'</span> row '+(y+1)+' column '+(x+1)+suppl+name;
+	symb = canvaslabels[symb]||symb;
+	var symbcanvas = typeof(symbols[symb])!='undefined'? symbols[symb]['refcanvas'] : '<span style="color:orange">'+symb+'</span>';
+	var name = typeof(leafs[rowid])=='undefined' ? '' : leafs[rowid].name;
+	var content = $('<span style="color:orange">'+name+'</span><br>').add(symbcanvas).add('<span> row '+(y+1)+' position '+seqpos+' column '+(x+1)+suppl+'</span>');
+	return {content:content, row:x, col:y, startx:x*model.boxw(), starty:y*model.boxh()}
 }
 
 function hidecolumns(e,id){
-	e.stopPropagation(); hidetooltip();
-	registerselections(id);
-	var adj = 0; //adjustment for  array length decrease
-	for(var c=0;c<colflags.length;c++){ if(colflags[c]){ visiblecols.splice(c-adj,1); adj++; } }//remove columns from list
+	if(e){ e.stopPropagation(); hidetooltip(); }
+	if(id=='revealall'){ visiblecols([]); for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); } }
+	else{
+		registerselections(id);
+		var adj = 0; //adjustment for  array length decrease
+		for(var c=0;c<colflags.length;c++){ if(colflags[c]){ visiblecols.splice(c-adj,1); adj++; } }//remove columns from list
+	}
 	redraw();
 }
 
-function togglerows(e,id,action){
-	e.stopPropagation(); hidetooltip();
+function togglerows(e,id,action){ //show/hide seq. rows & tree leafs
+	if(e){ e.stopPropagation(); hidetooltip(); }
 	var idarr = [];
 	if(action=='selection'){//hide selected rows
 		action = 'hide';
@@ -1089,20 +1344,16 @@ function togglerows(e,id,action){
 	}//else: hide/show from tree
 	if(typeof(idarr) != 'object'){ idarr = [idarr]; }
 	for(var i=0;i<idarr.length;i++){ leafs[idarr[i]].hideToggle(action); }
-	var svg = treesvg.getSvg();
-	var data = treesvg.getPhylogram().getData();
-	svg.svg1.clear();
-	svg.svg2.clear();
-	Smits.PhyloCanvas.Render.Phylogram(svg,data);
-	redraw();
+	refresh();
 }
 
-function maskdata(e,id,action){
+function maskdata(e,id,action){ //mask a sequence region
 	if(e){ e.stopPropagation(); hidetooltip(); }
+	if(action.indexOf('unmask')!=-1){ var symboltype = 'unmasked'; var flag = false; }
+	else{ var symboltype = 'masked'; var flag = 1; }
 	registerselections(id);
-	if(action=='maskcols'||action=='unmaskcols'){
-		if(action=='maskcols'){ var symboltype = 'masked'; var flag = 1; }
-		else{ var symboltype = 'unmasked'; var flag = false; }
+	if(action.indexOf('all')!=-1){ for(var id in sequences){ for(var c=0;c<sequences[id].length;c++) sequences[id][c] = symbols[sequences[id][c]][symboltype]; } }
+	else if(action=='maskcols'||action=='unmaskcols'){	
 		for(var c=0;c<colflags.length;c++){
 			if(colflags[c]){
 				var colid = visiblecols()[c];
@@ -1112,8 +1363,6 @@ function maskdata(e,id,action){
 		}
 	}
 	else if(action=='maskrows'||action=='unmaskrows'){
-		if(action=='maskrows'){ var symboltype = 'masked'; var flag = 1; }
-		else{ var symboltype = 'unmasked'; var flag = false; }
 		for(var r=0;r<rowflags.length;r++){
 			if(rowflags[r]){
 				var id = visiblerows()[r];
@@ -1122,8 +1371,6 @@ function maskdata(e,id,action){
 		}
 	}
 	else if(action=='maskselection'||action=='unmaskselection'){
-		if(action=='maskselection'){ var symboltype = 'masked'; var flag = 1; }
-		else{ var symboltype = 'unmasked'; var flag = false; }
 		for(var s=0;s<selections.length;s++){
 			var sel = selections[s];
 			for(var c=sel.colstart;c<=sel.colend;c++){
@@ -1147,110 +1394,55 @@ function maskdata(e,id,action){
 	redraw();
 }
 
-function showlog(btn,logfile){
-	var logdiv = $(btn).closest('div').next('div.logdiv');
+function showfile(btn,file){ //get&show file/folder content from server
+	var logdiv = $(btn).closest('div.itemdiv').next('div.logdiv');
 	if(logdiv.length==0){ //logdiv not yet created
-		logdiv = $('<div class="insidediv logdiv" style="display:none">');
-		$(btn).closest('div').after(logdiv);
+		logdiv = $('<div class="insidediv logdiv">');
+		$(btn).closest('div.itemdiv').after(logdiv);
 	}
-	else{
-		logdiv.slideUp(200,function(){logdiv.remove()});
+	else if(logdiv.css('display')!='none'){
+		logdiv.slideUp(200);
 		return;
 	}
-	$.ajax({ //download file to div
-		type: "GET",
-		url: logfile,
-    	dataType: "text",
-    	success: function(data){
-    		logdiv.html('<pre>'+data+'</pre>');
-    		logdiv.slideDown();
-    	},
-    	error: function(){ logdiv.html('Failed to load the log file.'); logdiv.slideDown(); }
-    });
+	if(file.indexOf('.')!=-1){ //file
+		$.ajax({
+			type: "GET",
+			url: file,
+    		dataType: "text",
+    		success: function(data){
+    			logdiv.html('<pre>'+data+'</pre>');
+    			logdiv.slideDown();
+    		},
+    		error: function(){ logdiv.html('Failed to load the log file.'); logdiv.slideDown(); }
+    	});
+    }
+    else{ //folder
+    	communicate('getdir',{dir:'analyses/'+file},{func: function(data){
+    		filearr = data.split('|');
+    		str = '';
+    		$.each(filearr,function(i,f){ fdata = f.split(':'); str += fdata[0]+' ('+numbertosize(fdata[1],'byte')+')<br>'; });
+    		logdiv.html(str);
+    		logdiv.slideDown(); 
+    	}});
+    }
 }
 
-function showdir(dir,btn,importdialog){
-	btn = $(btn);
-	var logdiv = btn.parent().next('div.logdiv');
-	if(logdiv.length==0){ //logdiv not yet created
-		btn.addClass('rotateddown');
-		logdiv = $('<div class="insidediv logdiv" style="display:none">');
-		btn.parent().after(logdiv);
-	}
-	else{
-		btn.removeClass('rotateddown');
-		logdiv.slideUp(200,function(){logdiv.remove()});
-		return;
-	}
-	var optdata = new FormData();
-	optdata.append('action','getdir');
-	optdata.append('dir',dir);
-	if(importdialog) optdata.append('subdir','yes');
-	$.ajax({ //download filelist to div
-		type: "POST",
-		url: 'backend.php',
-    	dataType: "text",
-    	success: function(data){
-    		data = data.split('|');
-    		if(data.length<5){ logdiv.html('No importable files in directory.'); logdiv.slideDown(); return; }
-    		logdiv.html(data.join('<br>'));
-    		logdiv.slideDown();
-    	},
-    	trycount: 0,
-    	error: function(xhrobj,status,msg){
-    		if(!msg&&status!="abort"){//no response. try again
-        		if(this.trycount<1){ this.trycount++; setTimeout(function(){$.ajax(this)},1000); return; }
-        		else{ logdiv.html('Server error.'); logdiv.slideDown(); }
-        	}
-    	},
-    	data: optdata,
-        cache: false,
-        contentType: false,
-        processData: false
-    });
-}
-
-function deletedir(dir,btn){
-	btn = $(btn);
-	btn.html('Deleting');
-    btn.css({'opacity':0.6,'cursor':'default'});
-	var optdata = new FormData();
-	optdata.append('action','rmdir');
-	optdata.append('dir',dir);
-	$.ajax({ //request to rm dir
-		type: "POST",
-		url: 'backend.php',
-    	dataType: "text",
-    	success: function(data){
-    		btn.html('Deleted');
-    		
-    	},
-    	trycount: 0,
-    	error: function(xhrobj,status,msg){
-    		if(!msg&&status!="abort"){//no response. try again
-        		if(this.trycount<1){ this.trycount++; setTimeout(function(){$.ajax(this)},1000); return; }
-        		else{ btn.html('Failed'); btn.attr('title','Server error. '+msg); }
-        	}
-    	},
-    	data: optdata,
-        cache: false,
-        contentType: false,
-        processData: false
-    });
-}
 
 function makewindow(title,content,options,container){ //(string,array(,obj{flipside:'front'|'back',backfade,btn:string|jQObj|array,id:string},jQObj))
 	if(!options){ var options = {}; }
+	if(options.id && $('#'+options.id).length!=0){ $('#'+options.id).remove(); }//kill clones
 	if(options.flipside){ //we make two-sided window
 		var sideclass = 'side '+options.flipside;
-	} else { var sideclass = '';}
+	} else { var sideclass = 'zoomin'; }
 	var windowdiv = $('<div class="popupwindow '+sideclass+'"></div>');
+	if(options.id) windowdiv.attr('id',options.id);
 	var shade = $("#backfade");
-	var closebtn = $('<img src="img/closebtn.png" class="closebtn">');
-	var closefunc = function(){
-		windowdiv.remove(); 
-		if(container){ container.remove() } 
-		if(shade.css('display')!='none'){ shade.css('opacity',0); setTimeout(function(){shade.hide()},400); }};
+	var closebtn = $('<img src="img/closebtn.png" class="closebtn" title="Close window">');
+	var closefunc = function(){ //close window
+		var wrapdiv = container ? container : windowdiv; 
+		wrapdiv.removeClass('zoomed'); setTimeout(function(){ wrapdiv.remove() },600); 
+		if(shade.css('display')!='none'){ shade.css('opacity',0); setTimeout(function(){ shade.hide() },600); }
+	};
 	closebtn.click(closefunc);
 	if(options.btn){ //add buttons
 		if(typeof(options.btn)=='string'||options.btn.jquery){ options.btn = [options.btn]; var align = 'center'; }//one btn
@@ -1264,30 +1456,43 @@ function makewindow(title,content,options,container){ //(string,array(,obj{flips
 	}
 	var titlediv = $('<div class="windowtitle"></div>');
 	var contentdiv = $('<div class="windowcontent"></div>');
+	contentdiv.css('max-height',$('#right').innerHeight()-100+'px');
+	var headerdiv = $('<div class="windowheader"></div>');
+	if(options.header){ $.each(options.header,function(i,val){ headerdiv.append(val) }); }
 	if(options.icn) title = '<img class="windowicn" src="img/'+options.icn+'"> '+title;
 	titlediv.html(title);
 	$.each(content,function(i,val){ contentdiv.append(val) });
-	windowdiv.append(contentdiv,titlediv,closebtn);
-	if(container){ container.append(windowdiv); var dragdiv = container; }
-	else{ $("#page").append(windowdiv); var dragdiv = windowdiv; }
-	dragdiv.draggable({ //make window draggable by its title
-		handle : "div.windowtitle",
-		containment : "#page"
-	});
-	if(options.backfade){ shade.css('display','block'); setTimeout(function(){shade.css('opacity',1)},50); }
-	if(options.id) windowdiv.attr('id',options.id);
-	if($('div.popupwindow').length>0){ //keep a new window top of other windows
-		var maxZ = Math.max.apply(null, $.map($('div.popupwindow'), function(e,i){ return parseInt($(e).css('z-index'))||1; }));
-		windowdiv.css('z-index',maxZ+1);
+	windowdiv.append(headerdiv,contentdiv,titlediv,closebtn);
+	if($('#page>div.popupwindow').length>0){ //keep a new window top of other windows
+		var maxZ = Math.max.apply(null, $.map($('#page>div.popupwindow'), function(e,i){ return parseInt($(e).css('z-index'))||1; }));
+		var pos = $('#page>div.popupwindow').last().position();
+		windowdiv.css({'z-index':maxZ+1,'top':pos.top+20+'px','left':pos.left+20+'px'});
 	}
-	windowdiv.mousedown(function(){ //keep selected window top of other windows
-			var maxZ = Math.max.apply(null, $.map($('div.popupwindow'), function(e,i){ return parseInt($(e).css('z-index'))||1; }));
+	if(container){ container.append(windowdiv); var dragdiv = container; } //add window to DOM
+	else{
+		$("#page").append(windowdiv); var dragdiv = windowdiv;
+		windowdiv.mousedown(function(){ //keep selected window top of other windows
+			var maxZ = Math.max.apply(null, $.map($('#page>div.popupwindow'), function(e,i){ return parseInt($(e).css('z-index'))||1; }));
 			if(parseInt($(this).css('z-index')) < maxZ) $(this).css('z-index',maxZ+1);
-    });
+    	});
+	}
+	if(container && windowdiv.width()>container.width()) container.css('width',windowdiv.width()+'px');
+	if(container && windowdiv.height()>container.height()) container.css('height',windowdiv.height()+'px');
+	setTimeout(function(){ //add lag to get correct dimensions
+	  	dragdiv.draggable({ //make window draggable by its title
+			handle : "div.windowtitle",
+			containment : [10,10,$("#page").width()-dragdiv.width()-20,$("#page").height()-dragdiv.height()-10]
+	}); },600);
+    if(options.backfade){ //make stuff visible
+    	shade.css('display','block');
+    	setTimeout(function(){ shade.css('opacity',1) },50);
+    	setTimeout(function(){ dragdiv.addClass('zoomed') },300);
+    }
+    else if(!container){ setTimeout(function(){ dragdiv.addClass('zoomed') },50); }
 	return windowdiv;
 }
 
-function dialog(type){
+function dialog(type,options){
 	var helpimg = $('<img class="icn" src="img/help.png">');
 	if(type=='import'){
 		$('div.popupwindow').remove(); //close other windows
@@ -1344,25 +1549,36 @@ function dialog(type){
 			readfiles(urlarr,infodiv,'download'); 
 		});
 		
-		var dirarr1 = $('<span class="rotateable" style="color:#666">&#x25BA;</span>');
-		dirarr1.click(function(){ showdir('data',this,infodiv) });
-		var dirspan1 = $('<span> Example data</span>').prepend(dirarr1);
-		var dirarr2 = $('<span class="rotateable" style="color:#666">&#x25BA;</span>');
-		dirarr2.click(function(){ showdir('output',this,infodiv) });
-		var dirspan2 = $('<span> Aligned data</span>').prepend(dirarr2);
-		
-		var dialogwrap = $('<div class="popupwrap"></div>');
+		var dialogwrap = $('<div class="popupwrap zoomin"></div>');
 		$("#page").append(dialogwrap);
 		var desc = '<b>Import local files</b> <img src="img/info.png" class="icn" title="Select file(s) that contain aligned or unaligned '+
 		'sequence (and tree) data. Supported filetypes: fasta, newick (.tree), HSAML (.xml), NEXUS, phylip, ClustalW (.aln), phyloXML"><br><br>';
 		var dialog = makewindow("Import files",[desc,filedrag,ordiv,selectbtn,
-			"<br><hr><b>Import remote files</b><br><br>",urladd,urlinput,'<span class="icon"></span><br>',dwnlbtn,'<hr><b>Import files from server</b><br><br>',dirspan1,'<br><br>',dirspan2],{backfade:true,flipside:'front',icn:'import.png'},dialogwrap);
+			"<br><hr><b>Import remote files</b><br><br>",urladd,urlinput,'<span class="icon"></span><br>',dwnlbtn],{backfade:true,flipside:'front',icn:'import.png'},dialogwrap);
 		var flipdialog = makewindow("Import data",[infodiv],{backfade:false,flipside:'back',icn:'import.png'},dialogwrap);
 	} //import dialog
 	else if(type=='export'){
-		var dialog = makewindow("Export data",["<b>Export data</b><ul><li>Write to local files</li><li>Export options (soft/hard masking etc.)</li></ul><br>"],{btn:'OK',icn:'export.png'});
+		var tabmenu = $('<ul class="tabmenu"><li class="active"><img src="img/align.png" trgt="seqtab">Sequence</li><li trgt="treetab"><img src="img/tree.png">Tree</li></ul>');
+		tabmenu.children().click(function(){
+			var self = $(this);
+			self.parent().children().removeClass('active'); self.addClass('active');
+			$("#exporttabs .tabcontent").removeClass('shown');
+			$("#"+self.attr('trgt')).addClass('shown');
+		});
+		var tabdivs = $('<div id="exporttabs" class="tabdivs"><div id="seqtab" class="tabcontent shown">'+
+		'<br>Name: <input type="text" class="hidden" title="Click to edit" data-bind="value:filename"><span data-bind="text:curitem().fileext"></span>'+
+		'<br>File format: <select data-bind="options:types,optionsText:\'name\',optionsValue:\'name\',value:selected"></select> <img class="note" data-bind="text:curitem().desc">'+
+		'<br><input type="checkbox" data-bind="visible:curitem().hastree,checked:incltree"> <span class="label" title="Include tree data" data-bind="visible:curitem().hastree">Include tree</span>'+
+		'  <input type="checkbox" data-bind="visible:curitem().interlace,checked:interlaced"><span class="label" title="Interlace sequence data rows" data-bind="visible:curitem().interlace">Interlaced</span>'+
+		'<hr><span>Mark masked characters with: </span><select data-bind="options:[\'lowercase\',\'N\',\'X\'],value:maskwith"></select>'+
+		'<br><input type="checkbox" data-bind="checked:inclhidden">Include hidden columns'+
+		'<br><div class="exportinfo"></div><a class="button" onclick="exportfile(\'seq\',this)">Export</a></div>'+
+		'<div id="treetab" class="tabcontent"></div></div>');
+		var dialogdiv = makewindow("Export data",[tabmenu,tabdivs],{icn:'export.png',id:'exportwindow'});
+		ko.applyBindings(exportmodel,dialogdiv[0]);
 	}
 	else if(type=='info'){
+		if($("#infowindow").length>0){ $("#infowindow").trigger('mousedown');  return; }
 		var list = $("<ul>");
 		if(model.treesource()){
 			list.append('<li>Number of nodes: <span data-bind="text:nodecount"></span></li>');
@@ -1376,23 +1592,26 @@ function dialog(type){
 		list.append('<li>Alignment height: <span data-bind="text:alignheight"></span> rows</li>');
 		if(model.treesource()){ list.append('<li>Tree data source: <span data-bind="text:treesource"></span></li>'); }
 		list.append('<li>Sequence data source: <span data-bind="text:seqsource"></span></li>');
-		var dialogdiv = makewindow("Data information",[list],{btn:'OK',icn:'info.png'});
+		var dialogdiv = makewindow("Data information",[list],{btn:'OK',icn:'info.png',id:'infowindow'});
 		ko.applyBindings(model,dialogdiv[0]);
 	}
 	else if(type=='align'){
 		//var expbtn = $('<img src="img/plus.png" class="icn optadd">');
 		var expbtn = $('<span class="rotateable texticn">&#x2295;</span>');
 		expbtn.click(function(e){
-			e.stopPropagation();
-			var expdiv = $(this).parent().next(".insidediv");
-			if(expdiv.css('display')=='none'){ $(this).addClass('rotated'); expdiv.slideDown(); infospan.fadeIn(); }
-			else{ $(this).removeClass('rotated'); expdiv.slideUp(); infospan.fadeOut(); }
+			e.stopPropagation(); self = $(this);
+			var expdiv = self.parent().next(".insidediv");
+			if(expdiv.css('display')=='none'){ if(self.hasClass('rotateable')) self.addClass('rotated'); expdiv.slideDown(); infospan.fadeIn(); }
+			else{ if(self.hasClass('rotateable')) self.removeClass('rotated'); expdiv.slideUp(); infospan.fadeOut(); }
 		});
+		var opttitlespan = $('<span class="actiontxt" title="Click to toggle options">Alignment options</span>').click(function(){expbtn.click()});
 		var infospan = $('<span class="note" style="display:none;margin-left:20px">Hover options for description</span>');
-		var opttitle = $('<div style="cursor:pointer">').append(expbtn,"Alignment options",infospan).click(function(){expbtn.click()});
+		var nameinput = $('<input type="text" class="hidden" value="PRANK alignment" title="Click to edit">');
+		var namespan = $('<span class="note">Descriptive name: </span>').append(nameinput);
+		var opttitle = $('<div>').append(expbtn,opttitlespan,infospan);
 		var optdiv = $('<div class="insidediv" style="display:none">');
 		var treecheck = model.treesource()?'':'checked="checked"';
-		var optform = $('<form id="optform" onsubmit="return false">'+
+		var optform = $('<form id="alignoptform" onsubmit="return false">'+
 		'<input type="checkbox" name="newtree" data-bind="enable:treesource" '+treecheck+'><span class="label" title="Checking this option builds a new guidetree for the sequence alignment process (otherwise uses the current tree).">make new tree</span>'+
 		'<br><input type="checkbox" checked="checked" name="anchor"><span class="label" title="Use Exonerate anchoring to speed up alignment">alignment anchoring</span> '+
 		'<br><input type="checkbox" name="e"><span class="label" title="Checking this option keeps current alignment intact (pre-aligned sequences) and only adds sequences for ancestral nodes.">keep current alignment</span>'+
@@ -1401,12 +1620,13 @@ function dialog(type){
 		'<br><span class="label" title="Gap opening rate">gap rate</span> <input type="text" name="gaprate" style="width:50px" data-bind="value:gaprate">'+
 		' <span class="label" title="Gap length">gap length</span> <input type="text" name="gapext" data-bind="value:gapext">'+
 		' <span class="label" title="Κ defines the ts/tv rate ratio for the HKY model that is used to compute the substitution scores for DNA alignments" data-bind="visible:isdna">K</span> <input type="text" name="kappa" data-bind="visible:isdna">'+
-		'<br><span class="label" title="Default values are empirical, based on the input data." data-bind="visible:isdna">DNA base frequencies</span> <input type="text" name="A" placeholder="A" data-bind="visible:isdna"><input type="text" name="C" placeholder="C" data-bind="visible:isdna"><input type="text" name="G" placeholder="G" data-bind="visible:isdna"><input type="text" name="T" placeholder="T" data-bind="visible:isdna"></form>');
+		'<br><span class="label" title="Default values are empirical, based on the input data." data-bind="visible:isdna">DNA base frequencies</span> <input type="text" name="A" placeholder="A" data-bind="visible:isdna"><input type="text" name="C" placeholder="C" data-bind="visible:isdna"><input type="text" name="G" placeholder="G" data-bind="visible:isdna"><input type="text" name="T" placeholder="T" data-bind="visible:isdna"><input type="hidden" name="dots" value="true"></form>');
 		optdiv.append(optform);
 		var alignbtn = $('<a class="button">Start alignment</a>');
 		alignbtn.click(function(){
 			var formel = optform[0];
 			var optdata = new FormData(formel);
+			optdata.append('name',nameinput.val());
 			optdata.append('action','startalign');
 			optdata.append('fasta',parseexport('fasta'));
 			if(treedata.newick && !formel['newtree']['checked']){ optdata.append('newick',parseexport('newick')); }
@@ -1429,29 +1649,21 @@ function dialog(type){
         			success: function(data){  //job sent to server. Show status.
         				optdiv.slideUp();
         				var job = $.parseJSON(data);
-        				//model.jobstatus(job.id,job);
         				optdiv.empty().append('<b>Alignment job started</b><br>');
-        				optdiv.next().after('<span class="note">You can close this window and access status via toolbar.</span>');
-        				optdiv.append('<div>ID: '+job.id+'</div>');
-        				//ko.applyBindings(model,optdiv[0]);
+        				optdiv.append('<div>Job ID: '+job.id+'<br>Started: '+msectodate(job.starttime)+'</div>');
+        				optdiv.next().after('<span class="note">Job status can be followed via toolbar.</span>');
         				optdiv.slideDown();
         				setTimeout(function(){
         					opttitle.html('<img class="icn" src="img/info.png"> Status of alignment job');
         					opttitle.css('cursor','default');
         					alignbtn.html('OK');
         					alignbtn.css({'opacity':1,'cursor':'pointer'});
-        					alignbtn.unbind('click').click(function(){ 
-        						$(this).closest("div.popupwindow").find("img.closebtn").click();
-        					});
+        					alignbtn.closest("div.popupwindow").find("img.closebtn").click();
         					communicate('alignstatus','','jobdata');
         				},500);
         			},
-        			trycount: 0,
         			error: function(xhrobj,status,msg){
-        				if(!msg&&status!="abort"){//no response. try again
-        					if(this.trycount<1){ this.trycount++; setTimeout(function(){$.ajax(this)},1000); return; }
-        					else{ msg = 'No response from server' }
-        				}
+        				if(status=='OK' && xhrobj.responseText){ this.success(xhrobj.responseText); return; }
         				alignbtn.html('Server error <img src="img/help.png" title="'+msg+'" class="icn">');
         				console.log('Alignment job error: '+status+'|'+msg);
         				if(xhrobj.responseText){ console.log(xhrobj.responseText); }
@@ -1461,46 +1673,51 @@ function dialog(type){
         			contentType: false,
         			processData: false
     			});
+    		var oldjobcount = serverdata['jobdata']().length;
+    		setTimeout(function(){
+    			if(serverdata['jobdata']().length==oldjobcount){ communicate('alignstatus','','jobdata'); }//no update made, fetch data update
+    			alignbtn.closest("div.popupwindow").find("img.closebtn").click(); //close alignment setup winow
+    		},5000);
 		});
-		var dialogdiv = makewindow("Make alignment",['Currently imported data will be aligned with <a href="http://www.ebi.ac.uk/goldman-srv/prank" target="_blank">PRANK</a> aligner.<br><hr>',opttitle,optdiv,'<br>'],{btn:alignbtn});
+		var dialogdiv = makewindow("Make alignment",['Currently imported data will be aligned with <a href="http://www.ebi.ac.uk/goldman-srv/prank" target="_blank">PRANK</a> aligner.<br><hr>',namespan,opttitle,optdiv,'<br>'],{btn:alignbtn});
 		ko.applyBindings(model,dialogdiv[0]);
 	}
 	else if(type=='jobstatus'){
-		if($("#jobstatus").length>0) return;
-		//var contentdiv = $('<div class="insidediv" data-bind="html:Object.keys(statushtml()).map(function(x){return statushtml()[x];}).join(\'<hr>\')"></div>');
-		var contentdiv = $('<div class="insidediv" data-bind="foreach:serverdata.jobdata"><div style="position:relative;min-width:310px"><span class="note">Status: <span data-bind="text:status"></span></span><br><span class="note">Running time: <span data-bind="text:starttime"></span></span><br><span class="note">File directory:</span> <span data-bind="text:id"></span><br><span class="note">Feedback <img src="img/file.png" class="icn" style="cursor:pointer;" onclick="showlog(this,logfile)" data-bind="attr:{title:\'Last update\'+starttime+\'. Click for full log.\'}">:</span><span class="logline" data-bind="text:log"></span></div></div>');
-		var jobstatusdiv = makewindow("Status overview",["<b>Status of started alignment jobs</b>",contentdiv,'<br>'],{id:"jobstatus"});
+		if($("#jobstatus").length>0){ $("#jobstatus").trigger('mousedown');  return; }
+		var contentdiv = $('<div class="insidediv" data-bind="foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>');
+		var header = ['<b>Status of started alignment jobs</b>','<span class="actiontxt note" style="position:absolute;top:0;right:20px;font-size:24px" onclick="communicate(\'alignstatus\',\'\',\'jobdata\')" title="Force-update the status">&#x267A;</span>'];
+		var jobstatusdiv = makewindow("Status overview",[contentdiv],{id:"jobstatus",header:header});
 		ko.applyBindings(model,contentdiv[0]);
+	}
+	else if(type=='history'){
+		communicate('getmeta','','analysdata');
+		if($("#history").length>0){ $("#history").trigger('mousedown');  return; }
+		var contentdiv = $('<div class="insidediv" data-bind="foreach:{data:sortedanalys,afterAdd:additem,beforeRemove:removeitem}"><div class="itemdiv" data-bind="html:html,style:{height:divh},css:{activeitem:isactive}"></div><div class="insidediv logdiv"></div><hr></div>');
+		var header = ['<b>Previous analyses</b>','<span style="position:absolute;top:10px;right:30px;">Sort by: <select data-bind="options:sortanalysopt,optionsText:\'t\',optionsValue:\'v\',value:sortanalysby"></select></span>'];
+		var historydiv = makewindow("History of analyses",[contentdiv],{id:"history",header:header,icn:'history.png'});
+		ko.applyBindings(model,historydiv[0]);
+	}
+	else if(type=='removeitem'||type=='terminate'){
+		var btn = options.btn;
+		var jobbtn = btn.title.indexOf('job')==-1 ? false : true;
+		var afterfunc = jobbtn ? function(){ communicate('alignstatus','','jobdata'); } : function(){ communicate('getmeta','','analysdata'); };
+		var action = type=='terminate' ? 'terminate' : 'rmdir';
+		var startlabel = type=='terminate'? 'Kill' : 'Delete';
+		if(btn.innerHTML==startlabel && !jobbtn){
+			btn.innerHTML = 'Confirm';
+			setTimeout(function(){ btn.innerHTML=startlabel; },5000);
+		}else{
+			communicate(action,{id:options.id},{btn:btn,func:afterfunc});
+		}
 	}
 }
 
-function updatestatus(jobid){
-	var qdata = new FormData();
-	qdata.append('action','alignstatus');
-	qdata.append('jobid',jobid);
-	$.ajax({
-		url: 'backend.php',
-        type: 'POST',
-        dataType: 'text',
-        success: function(data){  //job sent to server. Show status.
-        	var job = $.parseJSON(data);
-        	model.jobstatus(jobid,job);
-        	if(job.status=='running') setTimeout(function(){updatestatus(jobid)},1000);
-        },
-        trycount: 0,
-        error: function(xhrobj,status,msg){
-        	if(!msg){//no response. try again
-        		if(this.trycount<1){ this.trycount++; setTimeout(function(){$.ajax(this)},1000); return; }
-        		else{ msg = 'No response from server' }
-        	}
-        	console.log('Alignment job status update error: '+status+'|'+msg);
-        	if(xhrobj.responseText){ console.log(xhrobj.responseText); }
-        },
-        data: qdata,
-        cache: false,
-        contentType: false,
-        processData: false
-    });
+function sortdata(data,key){ //get sorted items from serverdata
+	if(!data) data = 'jobdata';
+	if(!key) key = 'starttime';
+	var itemsarray = typeof(data)=='string'? serverdata[data]() : data;
+	itemsarray.sort(function(a,b){ return a[key]&&b[key]? a[key]()>b[key]()?1:-1 : 0; });
+	return itemsarray;
 }
 
 var ajaxcalls = [];
@@ -1594,7 +1811,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
         				if(Object.keys(filescontent).length==goodfilecount){//all files have been read in. Go parse.
         					uploadbtn.html('Files imported');
         					ajaxcalls = [];
-        					parsefiles(infodiv);
+        					parseimport(infodiv);
         				} 
         			},
         			trycount : 0,
@@ -1617,13 +1834,14 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
     		});//for each file
     	});//btn click
 	  }
-	  if(action=='import'){ //get files from home server
+	  if(action.indexOf('import')!=-1){ //get files from local server
 	  	var uploadbtn = $(infodiv);
 	  	uploadbtn.html('Importing files');
         uploadbtn.css({'opacity':0.6,'cursor':'default'});
         uploadbtn.unbind('click');
         filescontent = {};
 	  	$.each(filearr,function(i,file){
+	  		var jobid = action.split(':')[1];
 	  		$.ajax({
 				type: "GET",
 				url: file.url,
@@ -1632,7 +1850,14 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
     				filescontent[file.name] = (data);
         			if(Object.keys(filescontent).length==goodfilecount){//all files have been read in. Go parse.
         				uploadbtn.html('Files imported');
-        				parsefiles(uploadbtn);//import files&hide statuswindow
+        				var result = parseimport(uploadbtn);//import files&hide statuswindow
+        				if(result){ //import succeeded: send confirmation to server
+        					model.currentid(jobid);
+        					communicate('writemeta',{id:jobid,key:'imported'});
+        					communicate('alignstatus','','jobdata');
+        					communicate('getmeta','','analysdata');
+        					setTimeout(function(){ $("#history .closebtn").click() },2000);
+        				}
         			}
     			},
     			trycount : 0,
@@ -1642,7 +1867,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
         				else{ msg = 'No response from server' }
         			}
         			uploadbtn.html('Server error <img src="img/help.png" title="'+msg+'" class="icn">');
-        			console.log('Upload/download error: '+status+'|'+msg);
+        			console.log('Server error: '+status+'|'+msg);
         			if(xhrobj.responseText){ console.log(xhrobj.responseText); }
         		}
         	});
@@ -1661,7 +1886,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
     				reader.onload = function(evt){
     					filescontent[file.name] = evt.target.result;
     					infodiv.parent().find("span.icon")[i].innerHTML = '<img src="img/tick.png" class="icn">';
-    					if(Object.keys(filescontent).length==goodfilecount){ uploadbtn.html('Files imported'); parsefiles(infodiv) }
+    					if(Object.keys(filescontent).length==goodfilecount){ uploadbtn.html('Files imported'); parseimport(infodiv) }
     				};  
     				reader.readAsText(file);
     			}
@@ -1670,7 +1895,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
 	  }
 	} else { var uploadbtn = '' }
 	
-  if(action!='import'){ //files from filebrowser. Flip the window.
+  if(action.indexOf('import')==-1){ //files from filebrowser. Flip the window.
 	var backbtn = $('<a class="button" style="padding-left:15px">&#x25C0; Back</a>');
 	backbtn.click(function(){
 		$.each(ajaxcalls,function(c,call){ if(call.readyState!=4){ call.abort(); }}); //cancel hanging filetransfers
@@ -1688,33 +1913,28 @@ function uploadprogress(e){ //file upload meter
     }
 }
 
+var hideborder = false;
+function rowborder(data,hiding){
+	if(hideborder) clearTimeout(hideborder);
+	var top = data.starty||seqinfo(data).starty||0;
+	var rborder = $("#rborder");
+	var hidefunc = function(){ rborder.removeClass('opaque'); setTimeout(function(){ rborder.css('display','none') },300); };
+	if(hiding=='hide'){ hidefunc(); return; }
+	rborder.css('top',top+1);
+	rborder.css('border: '+top);
+	if(rborder.css('display')=='none') rborder.css({display:'block',height:model.boxh()+1});
+	rborder.addClass('opaque');
+	if(hiding!='keep') hideborder = setTimeout(hidefunc,3000);
+}
+
 $(function(){
-	right = $("#right"); //DOM variables for mCustomScrollbar.js
-	seqwindow = $("#seqwindow");
-	wrap = $("#wrap");
-	seq = $("#seq");
-	seqwrap = $("#seqwrap");
-	ruler = $("#ruler");
-	verticalDragger_container = $("#verticalDragger");
-	verticalDragger = $("#verticalDragger .dragger");
-	scrollUpBtn = $("#verticalDragger .scrollUpBtn");
-	scrollDownBtn = $("#verticalDragger .scrollDownBtn");
-	horizontalDragger_container = $("#horizontalDragger");
-	horizontalDragger = $("#horizontalDragger .dragger");
-	scrollLeftBtn = $("#horizontalDragger .scrollLeftBtn");
-	scrollRightBtn = $("#horizontalDragger .scrollRightBtn");
-	canvasload = $("#canvasload");
-	spinner = $("#spinner");
-	treewrap = $("#treewrap");
-	 
-	spinner.css({'display':'block','opacity':1});
-	
+	dom = { seqwindow:$("#seqwindow"),seq:$("#seq"),wrap:$("#wrap") }; //glob.ref. to dom elements
 	ko.applyBindings(model);
 	
 	$("#zoombtns").hover(function(){$("#zoomperc").fadeIn()},function(){$("#zoomperc").fadeOut()});
+	$("#treebin div").append(svgicon('trash'));
 	
 	var $left = $("#left");
-	var $border = $("#leftborder");
 	var $right = $("#right");
 	$("#borderDrag").draggable({ //make tree width resizable
 		axis: "x", 
@@ -1741,33 +1961,50 @@ $(function(){
 		function(){$("#names").css('border-color','white')}
 	);
 	
-	seqwindow.mousedown(function(e){
+	$("#names").mouseleave(function(e){ rowborder(e,'hide'); });
+	
+	dom.seqwindow.mousedown(function(e){
 	 e.preventDefault();//disable image drag etc.
 	 var startpos = {x:e.pageX,y:e.pageY};
-	 if(e.pageY>seqwindow.offset().top+30){//in seq area
+	 if(e.pageY>dom.seqwindow.offset().top+30){//in seq area
 	  if(e.which==1 && e.target.tagName!='DIV'){//act on left mouse button, outside of selections
 		var curid = lastselectionid;
-		seqwindow.mousemove(function(evt){ selectionsize(evt,curid,startpos); });
-		seqwindow.mouseup(function(e){
-	 		if(e.pageY>seqwindow.offset().top+30){//in seq area
+		dom.seqwindow.mousemove(function(evt){ selectionsize(evt,curid,startpos); });
+		dom.seqwindow.mouseup(function(e){
+	 		if(e.pageY>dom.seqwindow.offset().top+30){//in seq area
 	  			if(e.which==1 && e.target.tagName!='DIV' && $("div.canvasmenu").length==0){ //outside of selections
 	  				var dx = e.pageX-startpos.x; var dy = e.pageY-startpos.y; 
-	  				if(Math.sqrt(dx*dx+dy*dy)<10) tooltip(e,'',seqinfo(e)); //no drag
+	  				if(Math.sqrt(dx*dx+dy*dy)<10){ //no drag: infobubble
+	  					var sdata = seqinfo(e);
+	  					var arrtype = e.pageY-dom.seqwindow.offset().top>dom.seqwindow.innerHeight()-90? 'bottom' : 'top';
+	  					rowborder(sdata);
+	  					tooltip(e,sdata.content,{container:"#seq",arrow:arrtype,target:sdata});
+	  				}
 	  			}
 	 		}
-	 		seqwindow.unbind('mouseup');
+	 		dom.seqwindow.unbind('mouseup');
 		});
 	  }
 	 }
 	});
 	
-	$("html").mouseup(function(){ seqwindow.unbind('mousemove'); });
+	$("html").mouseup(function(){ dom.seqwindow.unbind('mousemove'); });
 	
-	seqwindow.bind('contextmenu',function(e){//right click
+	dom.seqwindow.bind('contextmenu',function(e){//right click
 		e.preventDefault();//disable right-click menu
 		hidetooltip();
+		var maskcount = 0;
+		for(var c=0;c<maskedcols.length;c++){ if(maskedcols[c]){ maskcount++; } }
 		if($('div[id^="selection"]').length==0){//no selections made
-			tooltip(e,'','Drag to make a selection');
+			var menudata = {
+				'Mask all sequences' : {'click':function(){ maskdata(false,false,'maskall') },
+	  				'submenu':{ 'Unamask all sequences': function(){ maskdata(false,false,'unmaskall') }}}
+			};
+			var hrowsmenu = { 'Reveal all hidden rows' : function(){console.log('reveal all rows')}};
+			if(model.hiddenlen()>0){ menudata['Reveal '+model.hiddenlen()+' columns'] = {'click':function(){ console.log('uncollapse columns') },'submenu':hrowsmenu }; }
+			else menudata['Reveal all hidden rows'] = hrowsmenu['Reveal all hidden rows'];
+			if(maskcount>0) menudata['Collapse '+maskcount+' masked columns'] = function(){ maskdata(e,false,'hidemaskedcols') };
+			tooltip(e,'',{data:menudata});
 		}
 		else {
 	  	  var data = {};
@@ -1777,8 +2014,6 @@ $(function(){
 	  	  var curactiveid = activeid;
 	  	  
 	  	  if(mode=='default'||mode=='columns'){//construct right-click dropmenus for sequence area
-	  	  	var maskcount = 0;
-			for(var c=0;c<maskedcols.length;c++){ if(maskedcols[c]){ maskcount++; } }
 	  		data['\u25A5 Mask columns'] = { 'click':function(){ maskdata(false,false,'maskcols') }, 'submenu':{} };
 	  		if(activeid){ 
 	  			data['\u25A5 Mask columns']['submenu']['<span style="color:orange" title="Mask alignment columns under active (orange-bordered) selection area.">\u25A5</span> Mask these columns'] = { 'click' : function(e){ maskdata(e,curactiveid,'maskcols') } };
@@ -1820,6 +2055,7 @@ $(function(){
 	  	  }
 		  
 	  	  if(activeid){//right-click on selection
+	  	  	$("#seq div[class^='selection']").css({'border-color':'','color':''});
 	  		$('#selection'+activeid+',#vertcross'+activeid+',#horicross'+activeid).css({'border-color':'orange','color':'orange'});
 	  		if(over.id.indexOf('selection')!=-1){
 	  			data['<span style="color:orange">\u25A6</span> Mask selection area'] = { 'click':function(){ maskdata(false,activeid,'maskselection') },
@@ -1834,21 +2070,21 @@ $(function(){
 	  	  	data['\u259A Mask all selections'] = function(){ maskdata(false,false,'maskselection') }; 
 	  	  	data['\u2573 Clear all selections'] = function(){ clearselection(); }; 
 	  	  }
-	  	  tooltip(e,'','','',data);
+	  	  tooltip(e,'',{data:data});
 	   }
 	});
-	
-	
+		
 	$.ajax({ //get initial datafile
 		type: "GET",
-		url: "data/mindata.xml",
+		url: "data/"+model.startfile,
     	dataType: "text",
     	success: function(data){
     		filescontent = {};
-    		filescontent["testdata.xml"] = data;
-    		parsefiles();
+    		filescontent[model.startfile] = data;
+    		parseimport();
     	}
 	});
 	
-	communicate('alignstatus','','jobdata'); //get&save status of running jobs
+	communicate('alignstatus','','jobdata'); //get data from server
+	communicate('getmeta','','analysdata');
 });

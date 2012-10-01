@@ -16,6 +16,8 @@
 	<script type="text/javascript" src="js/mCustomScrollbar.js"></script>
 	<script type="text/javascript" src="js/raphael.js"></script>
 	<script type="text/javascript" src="js/jsphylosvg.js"></script>
+	<script type="text/javascript" src="js/icons.js"></script>
+	<script type="text/javascript" src="js/script.js"></script>
 </head>
 <body>
   <div id="page">
@@ -78,22 +80,21 @@
 	  <div id="seqwindow">
 	    <div id="wrap">
 	      <div id="ruler"></div>
-	      <div id="seqwrap"><div id="seq"></div></div>
+	      <div id="seqwrap"><div id="seq"><div id="rborder" class="rowborder"></div></div></div>
 	    </div>
 	    <img id="leftshadow" src="img/shadow_left.png">
 	    <img id="rightshadow" src="img/shadow_right.png">
-	    <div id="spinner">Loading <img style="height:36px;vertical-align:bottom" src="img/spinner.gif"></div>
+	    <img id="spinner" style="height:36px" src="img/spinner.gif">
 	  </div>
 	  <div id="horizontalDragger"><div class="scrollBtn scrollLeftBtn">&lt;</div><div class="dragger"></div><div class="scrollBtn scrollRightBtn">&gt;</div></div>
 	  <div id="verticalDragger"><div class="scrollBtn scrollUpBtn">&#x2227;</div><div class="dragger"></div><div class="scrollBtn scrollDownBtn">&#x2228;</div></div>
+	  <div id="treebin"><div></div></div>
 	</div>
 	<div id="namelabel"><span></span></div>
 	<div id="bottom"></div>
 	
-	<div id="tooltip" class="tooltip"><div class="arrow"></div><div class="tooltiptitle"></div><div class="tooltipcontent"><div class="tooltipcontentwrap"></div></div></div>
-  	<div id="tooltip2" class="tooltip"><div class="arrow, uparrow"></div><div class="tooltiptitle"></div><div class="tooltipcontent"><div class="tooltipcontentwrap"></div></div></div>
+	<div id="treemenu" class="tooltip leftarrow"><div class="arrow"></div><div class="tooltiptitle"></div><div class="tooltipcontentwrap hidden" style="overflow:visible"><div class="tooltipcontent"></div></div></div>
   	<div id="backfade"></div>
   </div>
-<script type="text/javascript" src="js/script.js"></script>
 </body>
 </html>

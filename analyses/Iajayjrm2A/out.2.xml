@@ -1,0 +1,40 @@
+<ms_alignment>
+<newick>(((seq1:0.00670,seq2:0.00667)#1#:0.00225,seq3:0.00883)#2#:0.00968,seq4:0.01832)#3#:0.00000</newick>
+<nodes>
+<leaf id="seq1" name="Homo_sapiens_1">
+  <sequence>
+    AVHQTPPLGSRATMAKVRWGSQNHYVHSRPRLCDMGRRACMSYRIKRGLSGAVSTVYPIGHWIGYC
+  </sequence>
+</leaf>
+<leaf id="seq2" name="Pan_troglodytes_1">
+  <sequence>
+    AVHQTPPLGSRATMAKVRWGSQNHYVHSRPRLCDMGRRACMSYRIERGLSGAVSTVYPIGHWIGYC
+  </sequence>
+</leaf>
+<leaf id="seq3" name="Gorilla_gorilla_1">
+  <sequence>
+    AVHQTPPLGSRATMAKVRWGSQNHYVHSRPRLCDMGRRACMSYRIERGLSGAVSTVYPIGHWIGYC
+  </sequence>
+</leaf>
+<leaf id="seq4" name="Pongo_abelii_1">
+  <sequence>
+    AVHQTPPLGSRATMAKVRWGSQNHYVHSRPRLCDMGRRACMSYRIERGLSGAVSTVYPIGHWIGYC
+  </sequence>
+</leaf>
+<node id="#1#">
+  <sequence>
+    AVHQTPPLGSRATMAKVRWGSQNHYVHSRPRLCDMGRRACMSYRIERGLSGAVSTVYPIGHWIGYC
+  </sequence>
+</node>
+<node id="#2#">
+  <sequence>
+    AVHQTPPLGSRATMAKVRWGSQNHYVHSRPRLCDMGRRACMSYRIERGLSGAVSTVYPIGHWIGYC
+  </sequence>
+</node>
+<node id="#3#">
+  <sequence>
+    AVHQTPPLGSRATMAKVRWGSQNHYVHSRPRLCDMGRRACMSYRIERGLSGAVSTVYPIGHWIGYC
+  </sequence>
+</node>
+</nodes>
+</ms_alignment>

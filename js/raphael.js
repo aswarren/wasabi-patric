@@ -310,6 +310,7 @@
             "arrow-end": "none",
             "arrow-start": "none",
             blur: 0,
+            class: "",
             "clip-rect": "0 0 1e9 1e9",
             cursor: "default",
             cx: 0,
