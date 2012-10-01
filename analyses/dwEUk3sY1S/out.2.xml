@@ -1,0 +1,670 @@
+<ms_alignment>
+<newick>(((((((((((((((seq1:0.00670,seq2:0.00667)#1#:0.00225,seq3:0.00883)#20#:0.00968,seq4:0.01832)#29#:0.00717,seq5:0.02549)#37#:0.00717,(seq6:0.00785,seq7:0.00764)#2#:0.02962)#44#:0.02197,seq8:0.06613)#50#:0.05759,seq9:0.13782)#54#:0.01106,(seq10:0.09275,seq11:0.12972)#3#:0.03546)#56#:0.01549,seq12:0.18620)#58#:0.00494,((((((seq13:0.08451,seq14:0.09159)#4#:0.19777,seq15:0.21161)#21#:0.02299,seq16:0.22563)#30#:0.01015,seq17:0.14847)#38#:0.02575,(seq18:0.11423,seq19:0.20107)#5#:0.10146)#45#:0.00766,(((((seq20:0.08451,seq21:0.09159)#6#:0.19777,seq22:0.21161)#22#:0.02299,seq23:0.22563)#31#:0.01015,seq24:0.14847)#39#:0.02575,(seq25:0.11423,seq26:0.20107)#7#:0.10146)#46#:0.01531)#51#:0.00766)#60#:0.01030,((((((((((seq27:0.00670,seq28:0.00667)#8#:0.00225,seq29:0.00883)#23#:0.00968,seq30:0.01832)#32#:0.00717,seq31:0.02549)#40#:0.00717,(seq32:0.00785,seq33:0.00764)#9#:0.02962)#47#:0.02197,seq34:0.06613)#52#:0.05759,seq35:0.13782)#55#:0.01106,(seq36:0.09275,seq37:0.12972)#10#:0.03546)#57#:0.01549,seq38:0.18620)#59#:0.00494,(((((seq39:0.08451,seq40:0.09159)#11#:0.19777,seq41:0.21161)#24#:0.02299,seq42:0.22563)#33#:0.01015,seq43:0.14847)#41#:0.02575,(seq44:0.11423,seq45:0.20107)#12#:0.10146)#48#:0.01531)#61#:0.02059)#62#:0.01030,((((seq46:0.10728,(seq47:0.06469,(seq48:0.06180,seq49:0.06180)#13#:0.06180)#25#:0.02515)#34#:0.02017,seq50:0.07900)#42#:0.02017,((seq51:0.10940,(seq52:0.09861,(seq53:0.05123,seq54:0.05123)#14#:0.05123)#26#:0.04984)#35#:0.00622,(seq55:0.14254,seq56:0.11340)#15#:0.03371)#43#:0.00451)#49#:0.01167,(seq57:0.22178,seq58:0.26956)#16#:0.05639)#53#:0.02123)#63#:0.02366,(((seq59:0.08224,seq60:0.15536)#17#:0.02699,seq61:0.24594)#27#:0.04970,(seq62:0.11666,seq63:0.09636)#18#:0.05314)#36#:0.00672)#64#:0.23473,(seq64:0.12569,(seq65:0.10100,seq66:0.10100)#19#:0.02100)#28#:0.21510)#65#:0.07166,seq67:0.45659)#66#:0.00000</newick>
+<nodes>
+<leaf id="seq1" name="Homo_sapiens_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......H..YVHS.......RP........RLCD.........MGRR.A-----C.MSYRI......K.RG..LS.....G...A.............V.STVY.PI....G.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq2" name="Pan_troglodytes_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......H..YVHS.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq3" name="Gorilla_gorilla_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......H..YVHS.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq4" name="Pongo_abelii_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......H..YVHS.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq5" name="Nomascus_leucogenys_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......H..YVHS.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LS.....G...A.............V.----.PI....G.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq6" name="Macaca_mulatta_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......H..YAHS.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LS.....G...A.............V.STVY.PIGRFNG.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq7" name="Papio_hamadryas_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGLQ.N.......H..YAHS.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LS.....G...A.............V.STVY.PIGRFNG.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq8" name="Callithrix_jacchus_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......H..YVHS.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WIG...YC
+  </sequence>
+</leaf>
+<leaf id="seq9" name="Tarsius_syrichta_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQ.N.......L..SVHY.......RP........RLCD.........MGRR.A-----Y.MSYRI......E.RG..LS.....S...A.............V.ATVY.PI....G.H..........WTG...YC
+  </sequence>
+</leaf>
+<leaf id="seq10" name="Microcebus_murinus_1">
+  <sequence>
+    -AVH...QT..PPLGS......R..AT..MAK.VR...WGSQEN.......H..YVHY.......RP........RLCR.........MGRR.A-----C.MSYRI......E.GG..LS.....G...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq11" name="Otolemur_garnettii_1">
+  <sequence>
+    -AAH...QT..PPLGS......R..AT..MAT.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSYRI......E.TG..SS.....G...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq12" name="Tupaia_belangeri_1">
+  <sequence>
+    -AVH...QT..PPSVS......K..AT..MAK.VR...QGSH.K.......H..NVHY.......RP........RLCV.........MGRR.A-----C.VSYRI......E.TG..LS.....D...A.............V.STVY.PL....G.H..........CTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq13" name="Mus_musculus_1A">
+  <sequence>
+    -AV-...QT..PQLVS......R..AS..MAK.VR...WGSP.N.......H..YVYY.......RP........RHCD.........MGRR.A-----C.MSYRI......E.RG..LS.....D...A.............V.TTVY.PI....G.H..........STGSASSW
+  </sequence>
+</leaf>
+<leaf id="seq14" name="Rattus_norvegicus_1A">
+  <sequence>
+    -AVR...QT..PQLVS...L..R..PT..MAK.VR...WGSP.N.......H..YVYY.......RP........RHCD.........RGRR.A-----C.MSYRI......E.RG..LS.....D...P.............V.STVY.PI....G.H..........STGSAPSW
+  </sequence>
+</leaf>
+<leaf id="seq15" name="Dipodomys_ordii_1A">
+  <sequence>
+    GAVH...QT..PQLVS......R..AT..MAK.VR...RGSQ.N.......H..YVHY.......RP........RNCD.........MGRR.A-----C.MSYRI......G.RG..LS.....E...V.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq16" name="Cavia_porcellus_1A">
+  <sequence>
+    -AVH...QT..PHLVS......R..AT..IAI.VRFD.WGSQ.N.......H..YVHY.......RP........R---.........---R.A-----C.ISYRI......G.RG..LS.....D...A.............V.STVY.PV....G.H..........WTG...--
+  </sequence>
+</leaf>
+<leaf id="seq17" name="Spermophilus_tridecemlineatus_1A">
+  <sequence>
+    -AVY...HT..PQLVS......R..AS..LAK.VR...WGAQ.N.......H..YFHV.VLYTRGRP........RLCD.........MGRR.V-----C.MSYRI......E.RG..LSSVPVTD...A.............I.STEY.PI....G.H..........WTS...YW
+  </sequence>
+</leaf>
+<leaf id="seq18" name="Oryctolagus_cuniculus_1A">
+  <sequence>
+    -AVH...QTILPPLVS......R..AT..TAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSYRI......EKRG..LS.....D...A.............V.-TVY.PI....GLH..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq19" name="Ochotona_princeps_1A">
+  <sequence>
+    -AVH...QTILPPHVF......R..AT..MAK.VR...WGSQ.N.......H..YIHY.......RP........RLCD.........IGRR.A-----C.MSNPI......EKRG..LS.....D...A.............V.STVY.PT....G.H..........CTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq20" name="Mus_musculus_1B">
+  <sequence>
+    -AVH...QT..PLLGS......R..AT..MAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MHRR.A-----C.MSHRI......E.RG..LS.....E...A.............V.STVY.HI....G.N..........WTA...YW
+  </sequence>
+</leaf>
+<leaf id="seq21" name="Rattus_norvegicus_1B">
+  <sequence>
+    -AVH...QT..PLLG-......-..--..---.--...----.N.......H..YVHY.......RP........RLCD.........MHRR.A-----C.MSHRI......E.RS..LS.....D...T.............V.STGY.HI....G.N..........WTA...YW
+  </sequence>
+</leaf>
+<leaf id="seq22" name="Dipodomys_ordii_1B">
+  <sequence>
+    -AVH...RT..PPLVS......R..VTIRMAK.VR...WGSH.N.......H.CYVHY.......QP........RLCD.........TDRR.A-----C.TSYRI......E.RD..LS.....D...A.............L.ATVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq23" name="Cavia_porcellus_1B">
+  <sequence>
+    -AVH...HT..PPLVS......R..AT..MTR.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........IDRR.A-----C.MSYRI......D.RG..MS.....ELH.A.............V.STVY.PI....G.H..........WT-...--
+  </sequence>
+</leaf>
+<leaf id="seq24" name="Spermophilus_tridecemlineatus_1B">
+  <sequence>
+    -SAH...QT..PPLVS......R..AT..MAK.VR...WGSQ.N.......H..CVYY.......RS........RLRD.........MSRR.A-----C.MSYRI......E.RG..LS.....D..PA.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq25" name="Oryctolagus_cuniculus_1B">
+  <sequence>
+    -AVH...RT..PPLVS......T..AT..MAK.VR...RGSR.N.......H..YVHY.......RP........MLCD.........MDRRDA-----C.MSYRI......A.RG..LS.....D...A.............L.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq26" name="Ochotona_princeps_1B">
+  <sequence>
+    -AVH...QT..PPLVS....RQA..AT..MAK.VR...RGSR.N.......H..YVHY.......GP........MFCD.........MGRR.A-----C.MSYRI......E.RG..LS.....D...A.LPQFHKGSLLNCL.ATVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq27" name="Homo_sapiens_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.Y.......H..YVHY.......RP........SLCD.........MGRR.A-----YAMSCRI......E.RG..LS.....G...A.............V.SAVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq28" name="Pan_troglodytes_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.Y.......H..YVHY.......RP........RLCD.........MGRR.A-----YAMSCRI......E.RG..LS.....G...A.............V.SAVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq29" name="Gorilla_gorilla_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.Y.......H..YVHY.......RP........RLCDL........MGRR.A-----YSMSCRI......E.RG..LS.....G...A.............V.SAVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq30" name="Pongo_abelii_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.Y.......H..YVHY.......RP........RLCD.........MGRR.A-----YAMSCRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq31" name="Nomascus_leucogenys_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.Y.......H..YVHY.......RP........RLCD.........MGRR.G-----Y.MSCRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq32" name="Macaca_mulatta_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...RGSQ.Y.......H..YVHY.......RP........RLCD.........MGRR.A-----Y.MSCRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WTV...YW
+  </sequence>
+</leaf>
+<leaf id="seq33" name="Papio_hamadryas_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...RGSQ.Y.......H..YVHY.......RP........RLCD.........MGRR.A-----Y.MSCRI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........WTV...YW
+  </sequence>
+</leaf>
+<leaf id="seq34" name="Callithrix_jacchus_2">
+  <sequence>
+    -VVHLKSQT..PSLVS......R..TT..MAK.VR...WGSQ.Y.......H..YVHY.......RP........RLCD.........MGRH.A-----Y.MSCLI......E.RG..LS.....G...A.............V.STVY.PI....G.H..........STS...YW
+  </sequence>
+</leaf>
+<leaf id="seq35" name="Tarsius_syrichta_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSCRI......E.RG..LS.....G...A.............V.STAY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq36" name="Microcebus_murinus_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR..EWGSQ.N.......H..YAHY.......RP........RLCD.........MGRR.A-----C.MSCRI......E.RG..LS.....D...A.............V.STVY.PI....G.H..........RTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq37" name="Otolemur_garnettii_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.N.......H..YLHY.......RP........RLCD.........MVRR.A-----C.MSCRI......E.RG..SS.....D...A.............I.STVH.PI....G.H.WSLSHNTTPRTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq38" name="Tupaia_belangeri_2">
+  <sequence>
+    -AVH...QT..P--VS......R..AP..MAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSCRI......E.RG..LP.....D...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq39" name="Mus_musculus_2">
+  <sequence>
+    -AVH...QT..PSLV-......G..PT..MAK.VR...WGSQ.N.......H..CVHY.......RPAFSNLRPVRPCD.........TGRR.A-----Y.TSSRI......E.RG..LS.....D...A.............V.SIVS.PI....G.H..........WTG...-W
+  </sequence>
+</leaf>
+<leaf id="seq40" name="Rattus_norvegicus_2">
+  <sequence>
+    -AVH...QT..PSLV-......G..ST..MAK.VR...LGSQ.N.......H..CVHY.......RPAFSNLRPVRPCD.........TGRR.A-----Y.TSSRI......E.RG..LS.....D...A.............V.STVY.PI....G.H..........WTG...-W
+  </sequence>
+</leaf>
+<leaf id="seq41" name="Dipodomys_ordii_2">
+  <sequence>
+    -AVH...QT..PSLVP......R..AT..MAI.VR...WGSQ.N.......H..YVHF.......RP........RLCD.........MGRR.A-----C.TSCLI......E.RG..LS.....D...S.............V.PTAY.PI....G.H..........WTR...-W
+  </sequence>
+</leaf>
+<leaf id="seq42" name="Cavia_porcellus_2">
+  <sequence>
+    -ALH...QT..PSLVS......R..AA..MAK.VR...WDSQ.N.......YR.YVHY.......RP........RLCD.........MGRR.A-----C.M----......-.--..--.....D...A.............VQSTVY.PI....G.H..........WTD...--
+  </sequence>
+</leaf>
+<leaf id="seq43" name="Spermophilus_tridecemlineatus_2">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSCRV......-.RG..LS.....D...A.............V.STVY.PI....G.H..........WSS...-W
+  </sequence>
+</leaf>
+<leaf id="seq44" name="Oryctolagus_cuniculus_2">
+  <sequence>
+    -AIH...QT..PSLVS......R..AT..IAI.VR...WG--.-.......-..----.......--........---D.........MGRR.A-----C.MSCRT......E.RG..LS.....D...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq45" name="Ochotona_princeps_2">
+  <sequence>
+    -AVH...QT..PSPVS......R..AT..MAI.VR...WGSQ.N.......H..YVHY.......--........-LCD.........MGQR.A-----C.MSCRT......E.KG..LS.....D...A.............V.STVYHPL....G.H..........WTG...FW
+  </sequence>
+</leaf>
+<leaf id="seq46" name="Vicugna_pacos">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAR.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MDRR.A-----C.MSYRG......D.RGKILS.....D...A.............V.PIVY.PI....G.HP.........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq47" name="Tursiops_truncatus">
+  <sequence>
+    -AVH...QT..PSLIW......R..AT..MAT.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MDRR.A-----C.MSYRI......D.RG..LS.....Y...A.............V.SIVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq48" name="Bos_taurus">
+  <sequence>
+    -AVH...QT..PTLVS......R..AT..IAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........LDRR.A-----C.MSYRI......D.RG..LS.....D...A.............V.SIVY.PK....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq49" name="Ovis_aries">
+  <sequence>
+    -AVH...QT..-TLVS......R..AT..MAK.VR...WGSQ.N.......H..YVHY.......RP........RHCD.........LTRR.A-----C.MSYRI......D.RG..SS.....D...A.............V.SIVY.PI....G.H..........WTG...YC
+  </sequence>
+</leaf>
+<leaf id="seq50" name="Sus_scrofa">
+  <sequence>
+    -AVH...QT..PSLVS......RSSAT..MAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MDRR.A-----Y.MLYRI......D.RG..LS.....D...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq51" name="Equus_caballus">
+  <sequence>
+    -TVH...QT..PSLVS......R..AT..MAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MPYRI......E.RG..LS.....D...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq52" name="Felis_catus">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...SGSQ.N.......H..YVYYT......RP........RLCD.........MDRH.A-----C.MSYRI......E.RG..LS.....D...A.............V.STVC.PV....G.H..........WTD...YW
+  </sequence>
+</leaf>
+<leaf id="seq53" name="Ailuropoda_melanoleuca">
+  <sequence>
+    -AVH...QT..PSLVS......R..AT..MAK.VR...SGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSYRIIRLM..E.RG..LS.....D...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq54" name="Canis_familiaris">
+  <sequence>
+    -AIH...QT..PSLVSCRS...R..AT..MAK.VR...PGSQ.N.......P..YFHY.......RP........RLCD.........MGRR.T-----C.VSNRI......E.RG..LS.....D...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq55" name="Myotis_lucifugus">
+  <sequence>
+    -AVH...RA..PSLVS......R..AT..MAK.-R...GGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSYRI......E.RG..LL.....D...A.............V.STIY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq56" name="Pteropus_vampyrus">
+  <sequence>
+    -AVH...QT..PSVVS......R..AT..MAK.IR...WGSQ.N.......H..YAHY.......RP........RLCD.........MGRC.A-----C.MSYRI......E.RG..LS.....D...A.............V.STIS.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq57" name="Erinaceus_europaeus">
+  <sequence>
+    -AVR...RT..PSLIS......R..AT..TAK.VR...WGSQ.N.......H..YVHY.......GP........RLCD.........RGRR.A-----C.MSSRT......D.GG..LS.....D...A.............V.STLY.PI....G.H..........WTR...YW
+  </sequence>
+</leaf>
+<leaf id="seq58" name="Sorex_araneus">
+  <sequence>
+    -AVH...QT..P-LVW......R..TT..SAK.VR...WGSQ.N.......H..YVHY.......GP........KLGE.INVNVNFIGGRR.A-----C.MSSRI....LEP.RG..LS.....D...A.............V.STLY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq59" name="Loxodonta_africana">
+  <sequence>
+    -AVH...RT..PSLIS......R..LI..MAKV-R...WGSQ.NDPPDSPAH..HVHY.......RP........RVCD.........MGRR.A-----C.MSYRI......E.RG..LS.....D...A.............L.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq60" name="Procavia_capensis">
+  <sequence>
+    -AVH...RT..PSLIS......R..LT..MAK.-R...WGSQ.NDPA-GPAH..CVHY.......PP........RVCD.........MGKR.A-----C.RSYRI......E.RG..LS.....D...-.............-.-TVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq61" name="Echinops_telfairi">
+  <sequence>
+    -AVH...RT..PALVS......R..LT..MAV.-G...WGSQ.NDPPDGAEH..YVHY.......RP........RLRE.........MGRR.A-----C.MS--I......E.KG..LS.....D...A.............L.-TVY.PM....A.H..........WAG...DW
+  </sequence>
+</leaf>
+<leaf id="seq62" name="Dasypus_novemcinctus">
+  <sequence>
+    -AVH...RT..PSLVS......R..ST..MAK.VR...WGSQ.N.......H..YVHY.......RP........RLCD.........MGRR.A-----C.MSYGI......E.RD..LS.....D...A.............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq63" name="Choloepus_hoffmanni">
+  <sequence>
+    -AVH...--..PSLVS......R..ST..MAK.VR...GESQ.N.......H..YVHY.......RP........RLCD.........MGRR.T-----S.MSYRI......E.RG..LS.....D...AP............V.STVY.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq64" name="Monodelphis_domestica">
+  <sequence>
+    -PAH...RT..APLIP......R..ST..MTK.IR...WRSQ.L.......Q..YIHY.......PS........RTYD.........MCRR.AGMKLPC.MSYRT......K.RG...S.....P...A.............A.STVC.PI....G.R..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq65" name="Macropus_eugenii">
+  <sequence>
+    -PAY...RT..PPLIP......R..ST..MTK.IR...WRSQ.L.......Q..YIHY.......PS........RPYD.........MCRR.AGMKLPR.MSYRT......E.RG...S.....P...A.............V.STVC.PI....G.H..........WTG...YW
+  </sequence>
+</leaf>
+<leaf id="seq66" name="Sarcophilus_harrisii">
+  <sequence>
+    -PAH...QT..PPLIP......R..ST..MTK.IR...WRSQ.L.......Q..YIHY.......PS........RPYD.........MCRR.AGRKLPC.MSYRT......E.RG...S.....P...A.............V.STIC.PI....G.H..........--A...YR
+  </sequence>
+</leaf>
+<leaf id="seq67" name="Ornithorhynchus_anatinus">
+  <sequence>
+    -AAH...RT..HPFIP......R..WT..MGK.IR...WVSQ.I.......H..YVHY.......--........RPCD.........MGRR.SGMMLPF.MSYRI......E.-G...A.....S...A.............V.LTVR.AI....G.L..........CTG...YR
+  </sequence>
+</leaf>
+<node id="#1#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#20#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#29#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#37#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#2#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YAHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PIGRFNG-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#44#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#50#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#54#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHS-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WIG---YC
+  </sequence>
+</node>
+<node id="#3#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCR---------MGRR-A-----C-MSYRI------E-GG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#56#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YC
+  </sequence>
+</node>
+<node id="#58#">
+  <sequence>
+    -AVH---QT--PPLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-TG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#4#">
+  <sequence>
+    -AVR---QT--PQLVS------R--PT--MAK-VR---WGSP-N-------H--YVYY-------RP--------RHCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---P-------------V-TTVY-PI----G-H----------STGSAPSW
+  </sequence>
+</node>
+<node id="#21#">
+  <sequence>
+    -AVH---QT--PQLVS------R--AT--MAK-VR---WGSP-N-------H--YVHY-------RP--------RHCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---V-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#30#">
+  <sequence>
+    -AVH---QT--PQLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RHCD---------MGRR-A-----C-MSYRI------G-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#38#">
+  <sequence>
+    -AVH---QT--PQLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RHCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#5#">
+  <sequence>
+    -AVH---QTILPPHVF------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------EKRG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#45#">
+  <sequence>
+    -AVH---QT--PQLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#6#">
+  <sequence>
+    -AVH---QT--PLLGS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MHRR-A-----C-MSHRI------E-RS--LS-----E---T-------------V-STVY-HI----G-N----------WTA---YW
+  </sequence>
+</node>
+<node id="#22#">
+  <sequence>
+    -AVH---QT--PPLGS------R--VT--MAK-VR---WGSH-N-------H--YVHY-------QP--------RLCD---------MHRR-A-----C-MSHRI------E-RD--LS-----D---A-------------V-STVY-HI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#31#">
+  <sequence>
+    -AVH---HT--PPLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MDRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#39#">
+  <sequence>
+    -AVH---QT--PPLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MDRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#7#">
+  <sequence>
+    -AVH---RT--PPLVS------T--AT--MAK-VR---RGSR-N-------H--YVHY-------RP--------MFCD---------MDRR-A-----C-MSYRI------A-RG--LS-----D---A-------------L-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#46#">
+  <sequence>
+    -AVH---QT--PPLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MDRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#51#">
+  <sequence>
+    -AVH---QT--PPLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#60#">
+  <sequence>
+    -AVH---QT--PPLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#8#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----YAMSCRI------E-RG--LS-----G---A-------------V-SAVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#23#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----YAMSCRI------E-RG--LS-----G---A-------------V-SAVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#32#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----YAMSCRI------E-RG--LS-----G---A-------------V-SAVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#40#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----Y-MSCRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#9#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---RGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----Y-MSCRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WTV---YW
+  </sequence>
+</node>
+<node id="#47#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----Y-MSCRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#52#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----Y-MSCRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#55#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-Y-------H--YVHY-------RP--------RLCD---------MGRR-A-----Y-MSCRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#10#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YAHY-------RP--------RLCD---------MGRR-A-----C-MSCRI------E-RG--LS-----D---A-------------I-STVH-PI----G-H----------RTG---YW
+  </sequence>
+</node>
+<node id="#57#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSCRI------E-RG--LS-----G---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#59#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSCRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#11#">
+  <sequence>
+    -AVH---QT--PSLV-------G--PT--MAK-VR---WGSQ-N-------H--CVHY-------RPAFSNLRPVRPCD---------TGRR-A-----Y-TSSRI------E-RG--LS-----D---A-------------V-SIVY-PI----G-H----------WTG----W
+  </sequence>
+</node>
+<node id="#24#">
+  <sequence>
+    -AVH---QT--PSLVP------R--AT--MAI-VR---WGSQ-N-------H--CVHY-------RP--------RPCD---------MGRR-A-----C-TSCRI------E-RG--LS-----D---S-------------V-PTVY-PI----G-H----------WTR----W
+  </sequence>
+</node>
+<node id="#33#">
+  <sequence>
+    -AVH---QT--PSLVP------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-TSCRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG----W
+  </sequence>
+</node>
+<node id="#41#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSCRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTS----W
+  </sequence>
+</node>
+<node id="#12#">
+  <sequence>
+    -AIH---QT--PSPVS------R--AT--MAI-VR---WGSQ-N-------H--YVHY------------------LCD---------MGRR-A-----C-MSCRT------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#48#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSCRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#61#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSCRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#62#">
+  <sequence>
+    -AVH---QT--PPLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#13#">
+  <sequence>
+    -AVH---QT--PTLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RHCD---------LDRR-A-----C-MSYRI------D-RG--SS-----D---A-------------V-SIVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#25#">
+  <sequence>
+    -AVH---QT--PTLIW------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MDRR-A-----C-MSYRI------D-RG--LS-----Y---A-------------V-SIVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#34#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MDRR-A-----C-MSYRI------D-RG--LS-----D---A-------------V-SIVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#42#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MDRR-A-----C-MSYRI------D-RG--LS-----D---A-------------V-SIVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#14#">
+  <sequence>
+    -AIH---QT--PSLVS------R--AT--MAK-VR---PGSQ-N-------H--YFHY-------RP--------RLCD---------MGRR-T-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#26#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---SGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#35#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#15#">
+  <sequence>
+    -AVH---QT--PSVVS------R--AT--MAK-IR---WGSQ-N-------H--YAHY-------RP--------RLCD---------MGRC-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STIY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#43#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#49#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#16#">
+  <sequence>
+    -AVH---RT--PSLIW------R--TT--TAK-VR---WGSQ-N-------H--YVHY-------GP--------RLCD---------RGRR-A-----C-MSSRI------P-RG--LS-----D---A-------------V-STLY-PI----G-H----------WTR---YW
+  </sequence>
+</node>
+<node id="#53#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------D-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#63#">
+  <sequence>
+    -AVH---QT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#17#">
+  <sequence>
+    -AVH---RT--PSLIS------R--LI--MAK--R---WGSQ-NDPPDSPAH--HVHY-------RP--------RVCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------L-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#27#">
+  <sequence>
+    -AVH---RT--PSLIS------R--LT--MAK--R---WGSQ-NDPPDGPAH--HVHY-------RP--------RVCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------L-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#18#">
+  <sequence>
+    -AVH---RT--PSLVS------R--ST--MAK-VR---WESQ-N-------H--YVHY-------RP--------RLCD---------MGRR-T-----C-MSYRI------E-RD--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#36#">
+  <sequence>
+    -AVH---RT--PSLVS------R--ST--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#64#">
+  <sequence>
+    -AVH---RT--PSLVS------R--AT--MAK-VR---WGSQ-N-------H--YVHY-------RP--------RLCD---------MGRR-A-----C-MSYRI------E-RG--LS-----D---A-------------V-STVY-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#19#">
+  <sequence>
+    -PAH---QT--PPLIP------R--ST--MTK-IR---WRSQ-L-------Q--YIHY-------PS--------RPYD---------MCRR-AGMKLPC-MSYRT------E-RG---S-----P---A-------------V-STIC-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#28#">
+  <sequence>
+    -PAH---RT--PPLIP------R--ST--MTK-IR---WRSQ-L-------Q--YIHY-------PS--------RPYD---------MCRR-AGMKLPC-MSYRT------E-RG---S-----P---A-------------V-STVC-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#65#">
+  <sequence>
+    -PVH---RT--PPLIP------R--ST--MTK-IR---WRSQ-N-------H--YIHY-------PP--------RPCD---------MCRR-AGMKLPC-MSYRI------E-RG---S-----P---A-------------V-STVC-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+<node id="#66#">
+  <sequence>
+    -AAH---RT--PPLIP------R--ST--MAK-IR---WRSQ-I-------H--YVHY-------PP--------RPCD---------MGRR-AGMMLPC-MSYRI------E-RG---S-----P---A-------------V-STVC-PI----G-H----------WTG---YW
+  </sequence>
+</node>
+</nodes>
+</ms_alignment>
