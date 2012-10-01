@@ -1,9 +1,0 @@
-
-PRANK: aligning sequences in '/Users/veidenbe/Desktop/biotek/analyses/Iajayjrm2A/input.fas', writing results to '/Users/veidenbe/Desktop/biotek/analyses/Iajayjrm2A/out.*' (.fas/.xml/.dnd).
-Using alignment guidetree '/Users/veidenbe/Desktop/biotek/analyses/Iajayjrm2A/input.tree'.
-
-Using Exonerate to anchor alignments. Use option '-noanchors' to disable.
-Generating multiple alignment.
-#1#(1/3): 0% aligned                    #2#(2/3): 0% aligned                    #3#(3/3): 0% aligned                    
-Alignment done. Total time 4s
-
