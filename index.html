@@ -3,7 +3,7 @@
 <head>
 	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
 	<meta http-equiv="content-script-type" content="text/javascript" />
-	<title>Alignment viewer</title>
+	<title>was@bi</title>
 	<link rel="shortcut icon" href="img/icon.png" />
 	<link rel="apple-touch-icon" href="img/icon_big.png" />
 	<link href="style.css" rel="stylesheet" type="text/css" media="screen" />
@@ -23,7 +23,9 @@
   <div id="page">
 	<div id="top">
 	
-	  <div style="position:absolute;top:20px;left:5%">
+	<img style="position:absolute;top:27px;right:150px;" src="img/wasabi_logo.png">
+	
+	  <div class="buttonblock" style="left:0">
 	     <div style="display:inline-block;position:relative;margin-left:10px;">
 	  		<a id="file" class="button file" onclick="togglemenu('filemenu')"><img src="img/file.png" class="before smaller"> File</a>
 	      	<div id="filewrap" class="buttonmenuwrap" style="top:52px">
@@ -34,30 +36,35 @@
 	   	  </div>
 	   </div>
 	   
-	   <div style="position:absolute;top:20px;left:15%">
-	     <div style="display:inline-block;position:relative;margin-left:10px;">
+	   <div class="buttonblock" style="left:5%;margin-left:50px">
 	  		<a id="run" class="button run" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before"> Analyses</a>
 	      	<div id="runwrap" class="buttonmenuwrap" style="top:52px">
 	      		<div class="menuborder"></div>
 	      		<div id="runmenu" class="buttonmenu"><ul data-bind="foreach:runmenu"><li data-bind="click:$parent.runclick"><span data-bind="text:n"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
-	   	  </div>
 	   </div>
 	   
-	  <div style="position:absolute;top:20px;left:30%">
-	    <div id="zoombtns" style="display:inline-block;position:relative;margin-right:20px;">
+	  <div class="buttonblock" style="left:15%;margin-left:120px">
+	    <div id="zoombtns" style="display:inline-block;position:relative;">
 	      <a id="zoomout" onclick="zoomout();" class="button zoom">-</a> <a id="zoomin" onclick="zoomin();" class="button zoom">+</a>
 	      <div id="zoomperc" style="top:-10px;font-weight:bold;display:none" class="toptext" data-bind="text:zoomperc"></div>
 	      <div class="toptext">Zoom</div>
 	    </div>
-	    <a id="historybtn" class="button undo redo"><img src="img/undo.png" class="before" style="vertical-align:6px"> history <img src="img/redo.png" class="after"></a>
-	    <!-- <a id="historybtn" class="button undo redo"><span class="before" style="vertical-align:6px">&#x27F2;</span> history <span class="after">&#x27F3;</span></a> -->
-	    <a id="statusbtn" onclick="dialog('jobstatus')" class="button square" data-bind="fadevisible:statusbtn()!='',html:statusbtn"></a>
 	  </div>
 	  
-	  <div style="position:absolute;top:20px;right:5%">
-	     <div style="display:inline-block;position:relative;margin-left:20px;">
+	  <div class="buttonblock" style="left:18%;margin-left:180px">
+	    <a id="historybtn" class="button undo redo"><img src="img/undo.png" class="before" style="vertical-align:6px"> history <img src="img/redo.png" class="after"></a>
+	    <div class="toptext">Actions history</div>
+	    <!-- <a id="historybtn" class="button undo redo"><span class="before" style="vertical-align:6px">&#x27F2;</span> history <span class="after">&#x27F3;</span></a> -->
+	  </div>
+	  
+	  <div class="buttonblock" style="left:21%;margin-left:300px" data-bind="fadevisible:statusbtn()!=''">
+	  	<a id="statusbtn" onclick="dialog('jobstatus')" class="button square" data-bind="html:statusbtn"></a>
+	    <div class="toptext">Notifications</div>  
+	  </div>
+	  
+	  <div class="buttonblock" style="right:10px">
 	  		<a id="selectmode" data-bind="text: selmode, attr: {class:selclass}" onclick="togglemenu('selectmodemenu')"></a>
 	      	<div class="toptext">Selection mode</div>
 	      	<div id="selectmodewrap" class="buttonmenuwrap">
@@ -65,7 +72,6 @@
 	      		<div id="selectmodemenu" class="buttonmenu"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode"><span data-bind="text:mode"></span><span class="right" data-bind="text:icon"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	      	</div>
-	     </div>
 	   </div>
 	   
 	</div><!--top-->

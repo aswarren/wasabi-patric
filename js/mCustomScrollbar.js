@@ -196,6 +196,7 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 			} else { //disable scrollbar if content is short
 				$verticalDragger.css("top",0).css("display","none"); //reset content scroll
 				dom.seq.css("margin-top",0);
+				$("#treewrap").css("top",0);
 				$verticalDragger_container.css("display","none");
 				$scrollDownBtn.css("display","none");
 				$scrollUpBtn.css("display","none");

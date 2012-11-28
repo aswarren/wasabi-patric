@@ -45,7 +45,8 @@ var is = { //browser detection
 }
 var dom = {};
 
-var myModel = function(){ //KnockOut viewmodel to keep the state of the system
+/* KnockOut data models to keep the state of the system */
+var myModel = function(){ //main viewmodel
 	var self = this;
 	self.startfile = "testdata.xml";
 	self.zoomlevel = ko.observable(10);
@@ -103,19 +104,36 @@ var myModel = function(){ //KnockOut viewmodel to keep the state of the system
 	self.sortjobsby = ko.observable('starttime');
 	self.sortedjobs = ko.computed(function(){ return sortdata('jobdata',self.sortjobsby()); }).extend({throttle:100});
 	self.jobtimeout = '';
+	
+	self.treealtered = ko.observable(false);
 	self.statusbtn = ko.computed(function(){
-		var running=0,ready=0,str='';
+		var str = '';
+		if(self.treealtered()){
+			str = '<span style="color:red">Realign needed</span>';
+		}
+		
+		var running=0,ready=0;
 		$.each(self.sortedjobs(),function(i,job){
 			if(job.status()=='running') running++;
 			else if(!job.imported()) ready++;
 		});
-		if(running > 0){
-			var s = running>1? 's':''; str = running+' job'+s+' running';
-			if(self.jobtimeout) clearTimeout(self.jobtimeout);
-			self.jobtimeout = setTimeout(function(){ communicate('alignstatus','','jobdata'); },1000); //update data in 1s
+		var total = running+ready;
+		var counticons = ['&#x24FF;','&#x2776;','&#x2777;','&#x2778;','&#x2779;','&#x277A;','&#x277B;','&#x277C;','&#x277D;','&#x277E;','&#x277F;','&#x24EB;','&#x24EC;','&#x24ED;','&#x24EE;','&#x24EF;','&#x24F0;','&#x24F1;','&#x24F2;','&#x24F3;','&#x24F4;'];
+		if(total>0){
+			if(str != ''){
+				str += '<span class="btnsection">'+(counticons[total]||total)+'<span>';
+			}
+			else{
+				str = 'Jobs ';
+				if(running > 0) str += 'running '+(counticons[running]||running);
+				if(ready > 0) str += 'ready '+(counticons[ready]||ready);
+			}
+			if(running > 0){
+				if(self.jobtimeout) clearTimeout(self.jobtimeout);
+				self.jobtimeout = setTimeout(function(){ communicate('alignstatus','','jobdata'); },1000); //update data in 1s
+			}
+			if(!str && $('#jobstatus').length>0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },1000); } //close empty jobstatus window
 		}
-		if(ready > 0){ var s = ready>1? 's':''; if(running>0) str+= ', '; else ready += ' job'+s; str+= ready+' finished'; }
-		if(!str && $('#jobstatus').length>0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },1000); } //close empty jobstatus window
 		return str;
 	}).extend({throttle: 200});
 	self.sortanalysopt = [{t:'Name',v:'name'},{t:'Analysis ID',v:'id'},{t:'Start date',v:'starttime'},{t:'Last opened',v:'imported'},{t:'Last saved',v:'savetime'}];
@@ -132,7 +150,7 @@ var myModel = function(){ //KnockOut viewmodel to keep the state of the system
 	};
 };//myModel
 
-var myExport = function(){
+var myExport = function(){ //model for file export window
 	var self = this;
 	self.types = [{name:'fasta',fileext:'.fa',desc:'',hastree:false,interlace:false},{name:'nexus',fileext:'.nex',desc:'',hastree:true,interlace:true},{name:'Phylip',fileext:'.phy',desc:'',hastree:false,interlace:true},{name:'PAML',fileext:'.phy',desc:'Phylip format optimized for PAML',hastree:false,interlace:false},{name:'RAxML',fileext:'.phy',desc:'Phylip format optimized for RAxML',hastree:false,interlace:false}];
 	self.selected = ko.observable('fasta');
@@ -142,9 +160,10 @@ var myExport = function(){
 	self.inclhidden = ko.observable(false);
 	self.interlaced = ko.observable(false);
 	self.maskwith = ko.observable('lowercase');
+	self.treesnapshot = '';
 }
 
-ko.bindingHandlers.fadevisible = {
+ko.bindingHandlers.fadevisible = { //item transitions in view model
 	init: function(element){ $(element).css('display','none') },
     update: function(element, value){
         var value = ko.utils.unwrapObservable(value());
@@ -162,7 +181,7 @@ ko.bindingHandlers.slidevisible = {
 var model = new myModel();
 var exportmodel = new myExport();
 
-var jobmodel = function(data){ //generates html representation for every running job
+var jobmodel = function(data){ //HTML representation for running jobs (jobstatus window)
 	ko.mapping.fromJS(data, {}, this);
 	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
 	
@@ -191,7 +210,7 @@ var jobmodel = function(data){ //generates html representation for every running
     }, this);
 }
 
-var analysmodel = function(data){ //generates html representation for past (imported) jobs
+var analysmodel = function(data){ //HTML representation for imported jobs (history window)
 	ko.mapping.fromJS(data, {}, this);
 	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
 	this.divh = '55px';
@@ -202,7 +221,7 @@ var analysmodel = function(data){ //generates html representation for past (impo
     	this.isactive = false;
     	if(this.hasOwnProperty('outfile') && this.outfile()){
     		var ofiles = this.outfile().split(',').join('\',\'');
-    		if (typeof(model)!='undefined' && this.id()==model.currentid()){ 
+    		if (typeof(model)!='undefined' && this.id() == model.currentid()){ 
     			var btnname = 'Restore';
     			var btntitle = 'Revert back to saved state';
     			this.isactive = true;
@@ -219,11 +238,11 @@ var analysmodel = function(data){ //generates html representation for past (impo
     		imported += ' (broken)';
     	}
     	var alignerdata = this.aligner().split(':');
-		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+imported+'<br><span class="note">File directory:</span> <span class="actiontxt" title="Toggle folder content" onclick="showfile(this,\''+this.id()+'\')">'+this.id()+'</span><span class="actiontxt itemexpand" onclick="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC;</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+saved+'<br><span class="note">Aligner:</span> <span class="label" title="Executable: '+alignerdata[1]+'">'+alignerdata[0]+'</span><br><span class="note">Parameters:</span> <span class="logline label" style="cursor:text" title="'+this.parameters()+'">'+this.parameters()+'<span class="fade"></span></span>'+removebtn+'</div>';
+		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+imported+'<br><span class="note">File directory:</span> <span class="actiontxt" title="Toggle folder content" onclick="showfile(this,\''+this.id()+'\')">'+this.id()+'</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+saved+'<br><span class="note">Aligner:</span> <span class="label" title="Executable: '+alignerdata[1]+'">'+alignerdata[0]+'</span><br><span class="note">Parameters:</span> <span class="logline label" style="cursor:text" title="'+this.parameters()+'">'+this.parameters()+'<span class="fade"></span></span>'+removebtn+'<span class="actiontxt itemexpand" onclick="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC;</span></div>';
     }, this);
 }
 
-function toggleitem(btn,starth){
+function toggleitem(btn,starth){ //expand/contract job divs (history window)
 	var itemdiv = $(btn).closest('div.itemdiv');
 	if(btn.innerHTML == '\u25BC'){ //expand itemdiv
 		itemdiv.css('height',itemdiv.children().first().height()+12+'px');
@@ -235,7 +254,41 @@ function toggleitem(btn,starth){
 	}
 }
 
-function communicate(action,senddata,saveto){ //send and receive+save data from server fn(str,obj,[str|obj])
+function showfile(btn,file){ //show file/folder content from server (history window)
+	var logdiv = $(btn).closest('div.itemdiv').next('div.logdiv');
+	if(logdiv.length==0){ //logdiv not yet created
+		logdiv = $('<div class="insidediv logdiv">');
+		$(btn).closest('div.itemdiv').after(logdiv);
+	}
+	else if(logdiv.css('display')!='none'){
+		logdiv.slideUp(200);
+		return;
+	}
+	if(file.indexOf('.')!=-1){ //file
+		$.ajax({
+			type: "GET",
+			url: file,
+    		dataType: "text",
+    		success: function(data){
+    			logdiv.html('<pre>'+data+'</pre>');
+    			logdiv.slideDown();
+    		},
+    		error: function(){ logdiv.html('Failed to load the log file.'); logdiv.slideDown(); }
+    	});
+    }
+    else{ //folder
+    	communicate('getdir',{dir:'analyses/'+file},{func: function(data){
+    		filearr = data.split('|');
+    		str = '';
+    		$.each(filearr,function(i,f){ fdata = f.split(':'); str += fdata[0]+' ('+numbertosize(fdata[1],'byte')+')<br>'; });
+    		logdiv.html(str);
+    		logdiv.slideDown(); 
+    	}});
+    }
+}
+
+
+function communicate(action,senddata,saveto){ //send and receive+save data from server (to data model)   fn(str,obj,[str|obj])
 	if(!action) return;
 	var optdata = new FormData();
 	optdata.append('action',action);
@@ -276,7 +329,7 @@ function communicate(action,senddata,saveto){ //send and receive+save data from 
 }
 
 
-function togglemenu(id,action,data){
+function togglemenu(id,action,data){ //show/hide dropdown menus
 	var menudiv = $('#'+id);
 	if(typeof(action)=='undefined' || action==''){ var action = menudiv.parent().css('display')=='none' ? 'show' : 'hide'; }
 	if(action=='show'){
@@ -316,6 +369,7 @@ function msectodate(sec){
 	return ('0'+t.getDate()).slice(-2)+'.'+('0'+(t.getMonth()+1)).slice(-2)+'.'+t.getFullYear().toString().substr(2)+' at '+t.getHours()+':'+('0'+t.getMinutes()).slice(-2);
 }
 
+/* Input file parsing */
 function parseimport(dialogdiv){
 	var errors = [], notes = [], treeoverwrite = false, seqoverwrite = false;
 	var Tnames = {}, Tsequences = {}, Ttreedata = {}, Ttreesource = '', Tseqsource = '', Tseqformat = '';
@@ -561,6 +615,7 @@ function parseimport(dialogdiv){
 	}
 }
 
+/* Output file parsing */
 function parseexport(filetype,options){
 	if(typeof(options)=='undefined'){ options={} }
 	var output = '', ids = [], regexstr = '', dict = {};
@@ -576,13 +631,15 @@ function parseexport(filetype,options){
 	var translate = regexstr ? function(s){ return dict[s] || s; } : '';
 	
 	if(filetype=='newick'||options.includetree){
-		var treefile = options.includeanc? treedata.newick : treedata.newick.replace(/\#\d+\#/g,'');
+		var newick = treesvg.data.root.write();
+		var treefile = options.includeanc? newick : newick.replace(/\#\d+\#/g,'');
 		$.each(names,function(id,name){ //id=>name in treefile
 			treefile = treefile.replace(id+':',name+':');
 		}); 
 	}else{ var treefile = ''; }
 	
 	if(options.includeanc) ids = Object.keys(sequences); else ids = Object.keys(leafs);
+	console.log(leafs);
 	var specount = ids.length; var ntcount = model.alignlen();
 	if(filetype=='fasta'){
 		$.each(ids,function(j,id){
@@ -602,6 +659,7 @@ function parseexport(filetype,options){
 	return output;
 }
 
+/* Sequence alignment and main window rendering */
 function makecolors(){
 	if(model.colorscheme()=='taylor'){
    		colors = { "A":["","rgb(204, 255, 0)"], "R":["","rgb(0, 0, 255)"], "N":["","rgb(204, 0, 255)"], "D":["","rgb(255, 0, 0)"], "C":["","rgb(255, 255, 0)"], "Q":["","rgb(255, 0, 204)"], "E":["","rgb(255, 0, 102)"], "G":["","rgb(255, 153, 0)"], "H":["","rgb(0, 102, 255)"], "I":["","rgb(102, 255, 0)"], "L":["","rgb(51, 255, 0)"], "K":["","rgb(102, 0, 255)"], "M":["","rgb(0, 255, 0)"], "F":["","rgb(0, 255, 102)"], "P":["","rgb(255, 204, 0)"], "S":["","rgb(255, 51, 0)"], "T":["","rgb(255, 102, 0)"], "W":["","rgb(0, 204, 255)"], "Y":["","rgb(0, 255, 204)"], "V":["","rgb(153, 255, 0)"], "B":["","rgb(255, 255, 255)"], "Z":["","rgb(255, 255, 255)"], "X":["","rgb(255, 255, 255)"]};
@@ -696,7 +754,7 @@ function redraw(zoom){
 	  							helper = movenode('drag',draggednode,dragged);
 	  							dragmode = true;
 	  						}
-	  						helper.css({left:evt.pageX+15,top:evt.pageY-5});
+	  						if(helper) helper.css({left:evt.pageX+15,top:evt.pageY-5});
 	  					}
 	  		}); } });
 
@@ -987,7 +1045,6 @@ function movenode(drag,movednode,movedtype){ //Create 'move node' mode (tree bra
 	 if(drag) return helper;
 }
 
-
 function tooltip(evt,title,options){ //make tooltips & pop-up menus
 	if(!options) options = {};
 	if(typeof(title)=='string') title = title.replace(/#/g,'');
@@ -1144,7 +1201,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     			$(node).append(tipdiv);
 		   		$(node).one('mouseleave',function(){ hidetooltip(tipdiv); }); 
     		}
-      		$('html').one('click', function(){ hidetooltip(); if(node.treenode) node.treenode.unhighlight(); });
+      		$('html').one('click', function(){ hidetooltip('','','noinfo'); if(node.treenode) node.treenode.unhighlight(); });
      	}
    	  }
    }
@@ -1163,7 +1220,8 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
    return tipdiv;
 }
 
-function hidetooltip(tooltip,exclude){
+function hidetooltip(tooltip,exclude,noinfo){
+	if(noinfo){ $("#rborder").removeClass('opaque'); $("#rborder").css('display','none'); }
 	tooltips = tooltip&&!exclude ? $(tooltip) : $("div.tooltip");
 	if(exclude) tooltips = tooltips.not(tooltip);
 	tooltips.each(function(){
@@ -1304,7 +1362,7 @@ function toggleselection(type){ //toggle row/column selection
 	}); 
 }
 
-function seqinfo(e){ //character info tooltip
+function seqinfo(e){ //character info tooltip (on sequence click)
 	if(!e.pageX||!e.pageY) return false;
 	var x = e.pageX-dom.seq.offset().left-2;
 	x = parseInt(x/model.boxw());
@@ -1394,40 +1452,7 @@ function maskdata(e,id,action){ //mask a sequence region
 	redraw();
 }
 
-function showfile(btn,file){ //get&show file/folder content from server
-	var logdiv = $(btn).closest('div.itemdiv').next('div.logdiv');
-	if(logdiv.length==0){ //logdiv not yet created
-		logdiv = $('<div class="insidediv logdiv">');
-		$(btn).closest('div.itemdiv').after(logdiv);
-	}
-	else if(logdiv.css('display')!='none'){
-		logdiv.slideUp(200);
-		return;
-	}
-	if(file.indexOf('.')!=-1){ //file
-		$.ajax({
-			type: "GET",
-			url: file,
-    		dataType: "text",
-    		success: function(data){
-    			logdiv.html('<pre>'+data+'</pre>');
-    			logdiv.slideDown();
-    		},
-    		error: function(){ logdiv.html('Failed to load the log file.'); logdiv.slideDown(); }
-    	});
-    }
-    else{ //folder
-    	communicate('getdir',{dir:'analyses/'+file},{func: function(data){
-    		filearr = data.split('|');
-    		str = '';
-    		$.each(filearr,function(i,f){ fdata = f.split(':'); str += fdata[0]+' ('+numbertosize(fdata[1],'byte')+')<br>'; });
-    		logdiv.html(str);
-    		logdiv.slideDown(); 
-    	}});
-    }
-}
-
-
+/* Generate pop-up windows */
 function makewindow(title,content,options,container){ //(string,array(,obj{flipside:'front'|'back',backfade,btn:string|jQObj|array,id:string},jQObj))
 	if(!options){ var options = {}; }
 	if(options.id && $('#'+options.id).length!=0){ $('#'+options.id).remove(); }//kill clones
@@ -1492,6 +1517,7 @@ function makewindow(title,content,options,container){ //(string,array(,obj{flips
 	return windowdiv;
 }
 
+//Content for different types of pop-up windows
 function dialog(type,options){
 	var helpimg = $('<img class="icn" src="img/help.png">');
 	if(type=='import'){
@@ -1551,13 +1577,14 @@ function dialog(type,options){
 		
 		var dialogwrap = $('<div class="popupwrap zoomin"></div>');
 		$("#page").append(dialogwrap);
-		var desc = '<b>Import local files</b> <img src="img/info.png" class="icn" title="Select file(s) that contain aligned or unaligned '+
-		'sequence (and tree) data. Supported filetypes: fasta, newick (.tree), HSAML (.xml), NEXUS, phylip, ClustalW (.aln), phyloXML"><br><br>';
+		var desc = '<div class="sectiontitle"><img src="img/file.png"><span title="Select file(s) that contain aligned or unaligned '+
+		'sequence (and tree) data. Supported filetypes: fasta, newick (.tree), HSAML (.xml), NEXUS, phylip, ClustalW (.aln), phyloXML" style="cursor:help">Import local files</span></div><br>';
 		var dialog = makewindow("Import files",[desc,filedrag,ordiv,selectbtn,
-			"<br><hr><b>Import remote files</b><br><br>",urladd,urlinput,'<span class="icon"></span><br>',dwnlbtn],{backfade:true,flipside:'front',icn:'import.png'},dialogwrap);
+			'<br><br><div class="sectiontitle"><img src="img/web.png"><span>Import remote files</span></div><br>',urladd,urlinput,'<span class="icon"></span><br>',dwnlbtn],{id:'import',backfade:true,flipside:'front',icn:'import.png'},dialogwrap);
 		var flipdialog = makewindow("Import data",[infodiv],{backfade:false,flipside:'back',icn:'import.png'},dialogwrap);
 	} //import dialog
 	else if(type=='export'){
+		parseexport('fasta');
 		var tabmenu = $('<ul class="tabmenu"><li class="active"><img src="img/align.png" trgt="seqtab">Sequence</li><li trgt="treetab"><img src="img/tree.png">Tree</li></ul>');
 		tabmenu.children().click(function(){
 			var self = $(this);
@@ -1615,7 +1642,7 @@ function dialog(type,options){
 		'<input type="checkbox" name="newtree" data-bind="enable:treesource" '+treecheck+'><span class="label" title="Checking this option builds a new guidetree for the sequence alignment process (otherwise uses the current tree).">make new tree</span>'+
 		'<br><input type="checkbox" checked="checked" name="anchor"><span class="label" title="Use Exonerate anchoring to speed up alignment">alignment anchoring</span> '+
 		'<br><input type="checkbox" name="e"><span class="label" title="Checking this option keeps current alignment intact (pre-aligned sequences) and only adds sequences for ancestral nodes.">keep current alignment</span>'+
-		'<br><br><b>Model parameters:</b><hr style="color:white">'+
+		'<br><br><div class="sectiontitle"><span>Model parameters</span></div>'+
 		'<input type="checkbox" checked="checked" name="F"><span class="label" title="Enabling this option is generally beneficial but may cause an excess of gaps if the guide tree is incorrect">trust insertions (+F)</span>'+
 		'<br><span class="label" title="Gap opening rate">gap rate</span> <input type="text" name="gaprate" style="width:50px" data-bind="value:gaprate">'+
 		' <span class="label" title="Gap length">gap length</span> <input type="text" name="gapext" data-bind="value:gapext">'+
@@ -1684,18 +1711,21 @@ function dialog(type,options){
 	}
 	else if(type=='jobstatus'){
 		if($("#jobstatus").length>0){ $("#jobstatus").trigger('mousedown');  return; }
-		var contentdiv = $('<div class="insidediv" data-bind="foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>');
-		var header = ['<b>Status of started alignment jobs</b>','<span class="actiontxt note" style="position:absolute;top:0;right:20px;font-size:24px" onclick="communicate(\'alignstatus\',\'\',\'jobdata\')" title="Force-update the status">&#x267A;</span>'];
-		var jobstatusdiv = makewindow("Status overview",[contentdiv],{id:"jobstatus",header:header});
-		ko.applyBindings(model,contentdiv[0]);
+		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. You can realign the sequence or revert the tree modifications.<br><a class="button square red" onclick="console.log(exportmodel.treesnapshot)">Revert</a><a class="button square">Realign</a>';
+		var notediv = '<div class="sectiontitle" data-bind="visible:treealtered"><img src="img/info.png"><span>Notifications</span></div><div data-bind="visible:treealtered" class="sectiontxt">'+treenote+'</div>';
+		var jobslistdiv = '<div class="sectiontitle" data-bind="visible:sortedjobs().length>0"><img src="img/run.png"><span>Status of background alignment jobs</span></div><div class="insidediv" data-bind="visible:sortedjobs().length>0,foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>';
+		var contentdiv = $(notediv+jobslistdiv);
+		//var header = ['<div class="sectiontitle"><img src="run.png"><span>Status of background alignment jobs</span></div>','<span class="actiontxt note" style="position:absolute;top:0;right:20px;font-size:24px" onclick="communicate(\'alignstatus\',\'\',\'jobdata\')" title="Force-update the status">&#x267A;</span>'];
+		var statuswindowdiv = makewindow("Status overview",[contentdiv],{id:"jobstatus"});
+		ko.applyBindings(model,statuswindowdiv[0]);
 	}
 	else if(type=='history'){
 		communicate('getmeta','','analysdata');
 		if($("#history").length>0){ $("#history").trigger('mousedown');  return; }
 		var contentdiv = $('<div class="insidediv" data-bind="foreach:{data:sortedanalys,afterAdd:additem,beforeRemove:removeitem}"><div class="itemdiv" data-bind="html:html,style:{height:divh},css:{activeitem:isactive}"></div><div class="insidediv logdiv"></div><hr></div>');
-		var header = ['<b>Previous analyses</b>','<span style="position:absolute;top:10px;right:30px;">Sort by: <select data-bind="options:sortanalysopt,optionsText:\'t\',optionsValue:\'v\',value:sortanalysby"></select></span>'];
-		var historydiv = makewindow("History of analyses",[contentdiv],{id:"history",header:header,icn:'history.png'});
-		ko.applyBindings(model,historydiv[0]);
+		var header = ['<b>Previous analyses</b>','<span style="position:absolute;top:5px;right:30px;">Sort by: <select data-bind="options:sortanalysopt,optionsText:\'t\',optionsValue:\'v\',value:sortanalysby"></select></span>'];
+		var historywindowdiv = makewindow("History of analyses",[contentdiv],{id:"history",header:header,icn:'history.png'});
+		ko.applyBindings(model,historywindowdiv[0]);
 	}
 	else if(type=='removeitem'||type=='terminate'){
 		var btn = options.btn;
@@ -1720,6 +1750,7 @@ function sortdata(data,key){ //get sorted items from serverdata
 	return itemsarray;
 }
 
+/* Validation of files in import dialog */
 var ajaxcalls = [];
 var acceptedtypes = ['xml','tre','fa','nex','nx','newick','nwk','ph','aln'];
 function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(array[fileurl,..],strig btnid|DOM,'download'|'import')
@@ -1927,6 +1958,7 @@ function rowborder(data,hiding){
 	if(hiding!='keep') hideborder = setTimeout(hidefunc,3000);
 }
 
+/* Initiation on page load */
 $(function(){
 	dom = { seqwindow:$("#seqwindow"),seq:$("#seq"),wrap:$("#wrap") }; //glob.ref. to dom elements
 	ko.applyBindings(model);
@@ -1963,6 +1995,7 @@ $(function(){
 	
 	$("#names").mouseleave(function(e){ rowborder(e,'hide'); });
 	
+	//Add mouse click/move listeners to sequence window
 	dom.seqwindow.mousedown(function(e){
 	 e.preventDefault();//disable image drag etc.
 	 var startpos = {x:e.pageX,y:e.pageY};
