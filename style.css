@@ -107,6 +107,48 @@ a.button .after{
     padding: 3px 1px 4px 0;
     vertical-align: 6px;
 }
+
+a.button.left{
+	width: 26px;
+	height: 26px;
+	border-right: none;
+	border-radius: 18px 0 0 18px;
+	padding: 3px 3px 3px 5px;
+	margin-right: 0;
+	vertical-align: 12px;
+}
+a.button.middle{
+	height: 26px;
+	line-height: 26px;
+	width: 70px;
+	overflow: hidden;
+	border-left: 2px groove white;
+	border-right: none;
+	border-radius: 0;
+	margin-left: 0;
+	margin-right: 0;
+	padding: 3px;
+	vertical-align: 0;
+	text-align: center;
+}
+a.button.right{
+	width: 26px;
+	height: 26px;
+	border-left: 2px groove white;
+	border-radius: 0 18px 18px 0;
+	padding: 3px 5px 3px 2px;
+	margin-left: 0;
+	vertical-align: 12px;
+}
+a.button svg.icon path{
+	fill: #bbb;
+	stroke: #444;
+}
+a.button:hover svg.icon path{
+	fill: orange;
+	stroke: #444;
+}
+
 a.button .smaller{
     height: 20px;
     padding: 5px 3px 7px 0;
@@ -233,7 +275,21 @@ div.buttonmenuwrap .buttonmenu{
 div.buttonmenuwrap div.buttonmenu span.right{
 	position: absolute;
 	right: 5px;
-	line-height: 18px;
+	margin-top: 3px;
+	line-height: 15px;
+	width: 15px;
+	height: 15px;
+}
+#undomenu ul li span.right{
+	right: 3px;
+	margin-top: 1px;
+	padding: 2px;
+	background-color: white;
+	border-radius: 9px;
+}
+div.buttonmenuwrap .buttonmenu svg.icon path{
+	fill: #666;
+	stroke: none;
 } 
 div.buttonmenuwrap .buttonmenu ul{
 	margin: 0;
@@ -1470,7 +1526,7 @@ span.actiontxt{
 span.actiontxt:hover{ color: orange; }
 span.itemexpand{
 	position: absolute;
-	right: 115px;
+	right: 40px;
 	bottom: -3px;
 	color: #666;
 }

@@ -5,7 +5,9 @@
 
 var sequences = {};
 var treedata = {};
+var treesvg = {};
 var names = {};
+var leafnodes = {};
 var colstep = 200;
 var rowstep = 60;
 var letters = '-_.:?!*=AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz'.split('');
@@ -48,6 +50,7 @@ var dom = {};
 /* KnockOut data models to keep the state of the system */
 var myModel = function(){ //main viewmodel
 	var self = this;
+	//rendering parameters
 	self.startfile = "testdata.xml";
 	self.zoomlevel = ko.observable(10);
 	self.zoomperc = ko.computed(function(){ var l = self.zoomlevel(); return l==2 ? 'MIN' : l==20 ? 'MAX' : l*5+'%'; });
@@ -57,7 +60,7 @@ var myModel = function(){ //main viewmodel
 	self.nameswidth = ko.observable(50);
 	self.namesw = ko.computed(function(){ return self.nameswidth()+'px'; });
 	self.dendogram = ko.observable(false);
-	
+	//button states
 	self.selmode = ko.observable('default');
 	self.selmodes = [{mode:'default',icon:'\u25FB'},{mode:'columns',icon:'\u25A5'},{mode:'rows',icon:'\u25A4'}];
 	self.selclass = ko.computed(function(){ return 'button '+self.selmode(); });
@@ -66,7 +69,7 @@ var myModel = function(){ //main viewmodel
 	self.fileclick = function(data){ dialog(data); togglemenu('filemenu','hide'); };
 	self.runmenu = [{n:'Make alignment',c:'align'},{n:'Make guidetree',c:'tree'},{n:'Compact columns',c:'compact'},{n:'Test alginment',c:'test'}];
 	self.runclick = function(data){ dialog(data.c); togglemenu('runmenu','hide'); };
-	
+	//sequence type
 	self.currentid = ko.observable('');
 	self.seqtype = ko.observable('residues');
 	self.colorscheme = ko.observable('taylor');
@@ -82,7 +85,7 @@ var myModel = function(){ //main viewmodel
 		var label = v? 'del.' : 'gap';
 		canvaslabels['-'] = label; canvaslabels['_'] = label;
 	});
-	
+	//sequence + tree statistics (info window)
 	self.maxseqlen = ko.observable(0);
 	self.maxseqlength = ko.computed(function(){ return numbertosize(self.maxseqlen(),self.seqtype()) });
 	self.minseqlen = ko.observable(0);
@@ -98,13 +101,14 @@ var myModel = function(){ //main viewmodel
 	self.hiddenlength = ko.computed(function(){ return numbertosize(self.hiddenlen(),self.seqtype()) });
 	self.treesource = ko.observable('');
 	self.seqsource = ko.observable('');
-	
+	//alignment parameteres (alignment window)
 	self.gaprate = ko.observable(0.005);
 	self.gapext = ko.observable(0.5);
+	//alignment jobs tracking (status window)
 	self.sortjobsby = ko.observable('starttime');
 	self.sortedjobs = ko.computed(function(){ return sortdata('jobdata',self.sortjobsby()); }).extend({throttle:100});
 	self.jobtimeout = '';
-	
+	//notifications
 	self.treealtered = ko.observable(false);
 	self.statusbtn = ko.computed(function(){
 		var str = '';
@@ -136,6 +140,7 @@ var myModel = function(){ //main viewmodel
 		}
 		return str;
 	}).extend({throttle: 200});
+	//imported alignments list (history window)
 	self.sortanalysopt = [{t:'Name',v:'name'},{t:'Analysis ID',v:'id'},{t:'Start date',v:'starttime'},{t:'Last opened',v:'imported'},{t:'Last saved',v:'savetime'}];
 	self.sortanalysby = ko.observable('starttime');
 	self.sortedanalys = ko.computed(function(){ return sortdata('analysdata',self.sortanalysby()); }).extend({throttle:100});
@@ -148,9 +153,41 @@ var myModel = function(){ //main viewmodel
 			$(div).fadeOut(300,function(){ $(this).remove(); });
 		}else{ $(div).remove(); }
 	};
+	//undo stack
+	self.undostack = ko.observableArray();
+	self.activeundo = ko.observable(''); //{name:'',type:'',data:{},undone:false}
+	self.undoname = ko.computed(function(){
+		if(!self.activeundo() && self.undostack().length>0) self.activeundo(self.undostack()[0]);
+		var name = self.activeundo()?self.activeundo().name:'History';
+		if(name.length>7) name = name.substr(0,6)+'..';
+		return name;
+	});
+	self.treesnapshot = '';
+	self.selectundo = function(data){
+		self.activeundo(data);
+		togglemenu('undomenu','hide');
+	};
+	self.addundo = function(undodata){
+		undodata.undone = false;
+		if(undodata.type='tree') undodata.info += ' Undo will also revert any subsequent tree modifications.'
+		self.undostack.unshift(undodata);
+		self.activeundo(undodata);
+	};
+	self.undo = function(){
+		var data = self.activeundo();
+		if(data.undone) return;
+		self.undostack.remove(data);
+		data.undone = true;
+	};
+	self.redo = function(){
+		var data = self.activeundo();
+		if(!data.undone) return;
+		self.addundo(data);
+	};
 };//myModel
 
-var myExport = function(){ //model for file export window
+//model for file exporting (export window)
+var myExport = function(){
 	var self = this;
 	self.types = [{name:'fasta',fileext:'.fa',desc:'',hastree:false,interlace:false},{name:'nexus',fileext:'.nex',desc:'',hastree:true,interlace:true},{name:'Phylip',fileext:'.phy',desc:'',hastree:false,interlace:true},{name:'PAML',fileext:'.phy',desc:'Phylip format optimized for PAML',hastree:false,interlace:false},{name:'RAxML',fileext:'.phy',desc:'Phylip format optimized for RAxML',hastree:false,interlace:false}];
 	self.selected = ko.observable('fasta');
@@ -160,10 +197,10 @@ var myExport = function(){ //model for file export window
 	self.inclhidden = ko.observable(false);
 	self.interlaced = ko.observable(false);
 	self.maskwith = ko.observable('lowercase');
-	self.treesnapshot = '';
 }
 
-ko.bindingHandlers.fadevisible = { //item transitions in view model
+//HTML element transitions when viewmodel data changes
+ko.bindingHandlers.fadevisible = {
 	init: function(element){ $(element).css('display','none') },
     update: function(element, value){
         var value = ko.utils.unwrapObservable(value());
@@ -177,11 +214,20 @@ ko.bindingHandlers.slidevisible = {
         if (value == true) $(element).slideDown(); else $(element).slideUp();
     }
 };
+ko.bindingHandlers.fadeText = {
+    update: function(element, valueAccessor){
+  		$(element).hide();
+        ko.bindingHandlers.text.update(element, valueAccessor);
+        $(element).fadeIn(200);
+    }        
+};
 
+//viewmodels initiation
 var model = new myModel();
 var exportmodel = new myExport();
 
-var jobmodel = function(data){ //HTML representation for running jobs (jobstatus window)
+//HTML rendering for running jobs (jobstatus window)
+var jobmodel = function(data){
 	ko.mapping.fromJS(data, {}, this);
 	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
 	
@@ -210,7 +256,8 @@ var jobmodel = function(data){ //HTML representation for running jobs (jobstatus
     }, this);
 }
 
-var analysmodel = function(data){ //HTML representation for imported jobs (history window)
+//HTML rendering for imported jobs (history window)
+var analysmodel = function(data){
 	ko.mapping.fromJS(data, {}, this);
 	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
 	this.divh = '55px';
@@ -370,9 +417,26 @@ function msectodate(sec){
 }
 
 /* Input file parsing */
-function parseimport(dialogdiv){
+
+function replacetree(newick){
+	if(!newick) newick = model.treesnapshot.nwk;
+	if(newick){ treedata = newick; } else { return; }
+	console.log(newick);
+	visiblerows.removeAll();
+	var newheight = model.treesnapshot.vrows*model.boxh();
+	treesvg = new Smits.PhyloCanvas(treedata, model.nameswidth(), dom.treewrap.width(), newheight);
+	if(newick == model.treesnapshot){ //reverting to unaltered tree
+		model.undostack.remove(function(item){ return item.type=='tree' });
+		if(model.activeundo().type=='tree') model.activeundo();
+	}
+	redraw();
+}
+
+
+function parseimport(options){ //options{dialog:jQ,update:true}
+	if(!options) options = {};
 	var errors = [], notes = [], treeoverwrite = false, seqoverwrite = false;
-	var Tnames = {}, Tsequences = {}, Ttreedata = {}, Ttreesource = '', Tseqsource = '', Tseqformat = '';
+	var Tidnames = {}, Tsequences = {}, Ttreedata = {}, Ttreesource = '', Tseqsource = '', Tseqformat = '';
 	var Ttotalseqcount=0, Tmaxseqlen=0, Talignlen=0, Tminseqlen=0, Tleafcount=0, Tnodecount=0;
 	
 	var parseseq = function(seqtxt,filename,format,nspecies,nchars){
@@ -409,7 +473,7 @@ function parseimport(dialogdiv){
    			if(bookmark < capture.index){ //found name btwn sequences
    				name = seqtxt.substring(bookmark+1,capture.index);
    				if(Tsequences[name]){ interleaved = true; repeatingnames=name; break; }
-   				Tsequences[name] = seqarr; Tnames[name] = name; taxanames.push(name);
+   				Tsequences[name] = seqarr; taxanames.push(name); //Tnames[name] = name;
    			}
    			else{ //found sequential sequence line
    				if(firstseqline){ if(taxanames.length>1){ interleaved = true; repeatingnames=false; break; } firstseqline = false; }
@@ -439,12 +503,14 @@ function parseimport(dialogdiv){
 	var parsenodeseq = function(){
 		var self = $(this);
    		var id = self.attr("id");
-   		var name = self.attr("name") ? self.attr("name") : '';
+   		var name = self.attr("name") ? self.attr("name") : id;
+   		if(self.attr("name")){ Tidnames[id] = name; }
    		var tmpseq = self.find("sequence").text();
    		if(tmpseq.length != 0){
    			tmpseq = tmpseq.replace(/\s+/g,'');
-   			Tsequences[id] = tmpseq.split('');
-   			Tnames[id] = name;
+   			name = name.replace(/#/g,'');
+   			if(Tsequences[name]){ errors.push("Non-unique taxa name found!<br>("+name+")"); }
+   			Tsequences[name] = tmpseq.split('');
    		}
    	};
 	
@@ -457,7 +523,7 @@ function parseimport(dialogdiv){
 			console.log('fasta');
 				//treetxt = treetxt.replace(/(['"]\w+)[^'"]+(['"])/g,"$1$2");
 			}
-			treetxt = treetxt.replace(/[\n\r]+/g,'')+';';
+			treetxt = treetxt.replace(/[\n\r#]+/g,'')+';';
 		}
 		Ttreedata[format] = treetxt;
 	};
@@ -499,7 +565,7 @@ function parseimport(dialogdiv){
    				var name = result[1];
    				if(Tsequences[name]){ errors.push("Non-unique taxa name found!<br>("+name+")"); break; }
    				Tsequences[name] = tmpseq.split('');
-   				Tnames[name] = name;
+   				//Tnames[name] = name;
    			}
    		}
    		else if(/^clustal/i.test(file)){ //Clustal
@@ -545,32 +611,31 @@ function parseimport(dialogdiv){
 	});
 	
 	var namearr = [];
-	if($.isEmptyObject(Tsequences)){ errors.push("No sequence data found") }
-	else{ namearr = Object.keys(Tsequences); }
+	if($.isEmptyObject(Tsequences) && $.isEmptyObject(sequences)){ errors.push("Sequence data is missing") }
+	else if($.isEmptyObject(sequences)){ namearr = Object.keys(Tsequences); }
 	
-	visiblerows.removeAll();
-	leafs = [];
-	if($.isEmptyObject(Ttreedata)){
-		//no tree: make placeholders (otherwise made by jsPhyloSVG)
+	if($.isEmptyObject(Ttreedata) && $.isEmptyObject(treedata)){
+		//no tree: fill placeholders (otherwise done by jsPhyloSVG)
+		visiblerows.removeAll(); leafnodes = {};
 		var nodecount = 0; var leafcount = namearr.length; Ttreesource = false;
-		$.each(namearr,function(indx,id){
-			leafs[id] = Tnames[id] ? {name:Tnames[id]} : {name:id};
-			visiblerows.push(id); 
+		$.each(namearr,function(indx,arrname){
+			leafnodes[arrname] = {name:arrname};
+			visiblerows.push(arrname); 
 		});
 	}
-	else{
+	else if(!$.isEmptyObject(Ttreedata)){ //check sequence data compatibility with the tree
 		var treetype = Ttreedata.phyloxml ? 'phyloxml' : 'newick';
 		var nodecount = treetype=='phyloxml' ? $(file).find("clade").length : Ttreedata.newick.match(/\(/g).length;
 		var leafcount = treetype=='phyloxml' ? $(file).find("name").length : Ttreedata.newick.match(/,/g).length+1;
-		if(leafcount > namearr.length && !$.isEmptyObject(Tsequences)){ errors.push("Not enough sequences for all tree leafs"); }
-		$.each(namearr,function(indx,name){
-			if(Ttreedata[treetype].indexOf(name)==-1){ errors.push("Some sequence names missing from tree data <br> ('"+name+"' etc.)"); return false; }
-		});
+		if(leafcount > namearr.length && !$.isEmptyObject(Tsequences)){ notes.push("Some tree leafs has no sequence data"); }
+		/*$.each(namearr,function(indx,name){
+			if(Ttreedata[treetype].indexOf(name)==-1){ errors.push("Some sequence names missing from the tree <br> ('"+name+"' etc.)"); return false; }
+		});*/
 	}
 	//var seqnames = Object.keys(Tnames).sort(); var treenames = Ttreedata.newick.match(/[a-z]+\w+/ig).sort();
 	
-	if(errors.length==0){ //no errors - use data from temporary variables
-		if(dialogdiv){ setTimeout(function(){ dialogdiv.closest(".popupwindow").find(".closebtn").click() }, 2000); }//close import window
+	if(errors.length==0){ //no errors - use data from placeholders
+		if(options.dialog){ setTimeout(function(){ options.dialog.closest(".popupwindow").find(".closebtn").click() }, 2000); }//close import window
 		if(treeoverwrite){ notes.push('Tree data found in multiple files. Using '+Ttreesource); }
 		if(seqoverwrite){ notes.push('Sequence data found in multiple files. Using '+Tseqsource); }
 		if(notes.length!=0){
@@ -579,6 +644,7 @@ function parseimport(dialogdiv){
 			setTimeout(function(){ makewindow('File import warnings',['<br>',ul,'<br>'],{btn:'OK',icn:'info.png'}); }, 3000); 
 		}
 		
+	  if(Tsequences){ //sequence data drop in
 		Tminseqlen = Tsequences[namearr[0]].length;
 		var longestseq = '', hasdot = false;
 		for(var n=0;n<namearr.length;n++){ //count sequence lengths
@@ -594,22 +660,28 @@ function parseimport(dialogdiv){
 		var dnachars = new RegExp('['+alphabet.dna.slice(0,-2).join('')+'_.:?!'+']','ig');
 		longestseq = longestseq.replace(dnachars,''); //check if a sequence consists of DNA symbols
 		if(longestseq.length==0){ model.seqtype('dna') } else if(longestseq.replace(/u/ig,'').length==0){ model.seqtype('rna') } else{ model.seqtype('residues') }
-		
-		
-		names = Tnames; sequences = Tsequences; model.totalseqcount(namearr.length); model.alignlen(Talignlen);
-		model.minseqlen(Tminseqlen); model.maxseqlen(Tmaxseqlen);
-		model.nodecount(nodecount); model.leafcount(leafcount); visiblecols.removeAll();
-		treedata = Ttreedata; model.treesource(Ttreesource); model.seqsource(Tseqsource); first = true;
-		for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark visible columns
+		sequences = Tsequences; model.totalseqcount(namearr.length); model.alignlen(Talignlen);
+		model.minseqlen(Tminseqlen); model.maxseqlen(Tmaxseqlen); idnames = Tidnames;
+		model.seqsource(Tseqsource); maskedcols = [];
+		visiblecols.removeAll(); for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark visible columns
+		model.undostack.remove(function(item){ return item.type=='seq'} );
 		makecolors();
-   		redraw();
-   		return true;
+	  }
+		
+	  if(Ttreedata){ //tree data drop in
+	  	treedata = Ttreedata; model.treesource(Ttreesource); model.nodecount(nodecount); model.leafcount(leafcount);
+	  	model.treesnapshot = ''; model.undostack.remove(function(item){ return item.type=='tree'} );
+	  }	
+	  
+	  	model.activeundo('');
+   	  	redraw();
+   	  	return true;
 	}
 	else { //diplay errors, no import
 		var ul = document.createElement("ul");
 		$(ul).css('color','red');
 		$.each(errors,function(j,err){ $(ul).append("<li>"+err+"</li>") });
-		if(dialogdiv){  dialogdiv.find("ul").after('<br><b>File import errors:</b><br>',ul); }
+		if(options.dialog){  options.dialog.find("ul").after('<br><b>File import errors:</b><br>',ul); }
 		else { makewindow('File import failed',['<br>',ul,'<br>'],{btn:'OK',icn:'warning.png'}); }
 		return false;
 	}
@@ -638,12 +710,11 @@ function parseexport(filetype,options){
 		}); 
 	}else{ var treefile = ''; }
 	
-	if(options.includeanc) ids = Object.keys(sequences); else ids = Object.keys(leafs);
-	console.log(leafs);
+	if(options.includeanc) ids = Object.keys(sequences); else ids = Object.keys(leafnodes);
 	var specount = ids.length; var ntcount = model.alignlen();
 	if(filetype=='fasta'){
 		$.each(ids,function(j,id){
-			output += '>'+names[id]+"\n";
+			output += '>'+id+"\n";
 			for(var c=0;c<sequences[id].length;c+=50){
 				output += sequences[id].slice(c,c+49).join('').replace(regex,translate)+"\n";
 			}
@@ -659,7 +730,7 @@ function parseexport(filetype,options){
 	return output;
 }
 
-/* Sequence alignment and main window rendering */
+/* Rendrering: tree & sequence alignment areas */
 function makecolors(){
 	if(model.colorscheme()=='taylor'){
    		colors = { "A":["","rgb(204, 255, 0)"], "R":["","rgb(0, 0, 255)"], "N":["","rgb(204, 0, 255)"], "D":["","rgb(255, 0, 0)"], "C":["","rgb(255, 255, 0)"], "Q":["","rgb(255, 0, 204)"], "E":["","rgb(255, 0, 102)"], "G":["","rgb(255, 153, 0)"], "H":["","rgb(0, 102, 255)"], "I":["","rgb(102, 255, 0)"], "L":["","rgb(51, 255, 0)"], "K":["","rgb(102, 0, 255)"], "M":["","rgb(0, 255, 0)"], "F":["","rgb(0, 255, 102)"], "P":["","rgb(255, 204, 0)"], "S":["","rgb(255, 51, 0)"], "T":["","rgb(255, 102, 0)"], "W":["","rgb(0, 204, 255)"], "Y":["","rgb(0, 255, 204)"], "V":["","rgb(153, 255, 0)"], "B":["","rgb(255, 255, 255)"], "Z":["","rgb(255, 255, 255)"], "X":["","rgb(255, 255, 255)"]};
@@ -718,74 +789,71 @@ function mixcolors(color,mix){
 	return "rgb("+r+","+g+","+b+")";
 }
 
-var first = true;
 function redraw(zoom){
-	canvaspos = []; colflags = []; rowflags = []; //reset flags
-	lastselectionid = 0; activeid = false; $names = $("#names"); $treewrap = $("#treewrap");
-	$("#seq div[id*='selection'],#seq div[id*='cross']").remove(); //remove selection boxes
+	canvaspos = []; colflags = []; rowflags = []; //clear selections and its flags
+	lastselectionid = 0; activeid = false;
+	$("#seq div[id*='selection'],#seq div[id*='cross']").remove();
 	
 	var newheight = visiblerows().length==0 ? model.leafcount()*model.boxh() : visiblerows().length*model.boxh();
-	if(!zoom){ $treewrap.css('height',newheight); $("#names svg").css('font-size',model.fontsize()+'px'); }
-	if(first){//make tree and get visiblerows
-		maskedcols = []; //reset variables
-		counter = 0; treesvg = {}; Smits.Common.nodeIdIncrement = 0;
+	if(!zoom){ dom.treewrap.css('height',newheight); $("#names svg").css('font-size',model.fontsize()+'px'); }
+	if(treedata && $.isEmptyObject(treesvg)){//make tree SVG
 		$label = $("#namelabel"); $labelspan = $("#namelabel span");
-		$("#tree").empty(); $names.empty();
+		dom.tree.empty(); dom.names.empty();
 		dom.wrap.css('left',0); dom.seq.css('margin-top',0);
-		$treewrap.css({top:0,height:newheight});
-		if(model.treesource()){
-			$("#notree").fadeOut(); $("#tree").css('box-shadow','none');
-			$("#treewrap").css('background-color','white');
-			treesvg = new Smits.PhyloCanvas(treedata, model.nameswidth(), $treewrap.width(), newheight);
-			var svg = $("#tree>svg,#names>svg");
-			svg.mousedown(function(e){ //handle nodedrag on tree
-				e.preventDefault();
-				var dragged = e.target.tagName;
-	  			if(dragged=='circle' || dragged=='tspan'){
-	  				var raphid = dragged=='tspan'? e.target.parentNode.raphaelid : e.target.raphaelid;
-	  				var svgid = dragged=='tspan'? 'svg2' : 'svg1';
-	  				var draggednode = treesvg.svg[svgid].getById(raphid).data('node');
-	  				$("#page").one('mouseup',function(){ $("#page").unbind('mousemove'); });
-	  				var startpos = {x:e.pageX,y:e.pageY}, dragmode = false, helper;
-					$("#page").mousemove(function(evt){
-						var dx = evt.pageX-startpos.x, dy = evt.pageY-startpos.y;
-	  					if(Math.sqrt(dx*dx+dy*dy)>7){
-	  						if(!dragmode){
-	  							helper = movenode('drag',draggednode,dragged);
-	  							dragmode = true;
-	  						}
-	  						if(helper) helper.css({left:evt.pageX+15,top:evt.pageY-5});
+		dom.treewrap.css({top:0,height:newheight});
+		$("#notree").fadeOut(); dom.tree.css('box-shadow','none');
+		dom.treewrap.css('background-color','white');
+		
+		Smits.Common.nodeIdIncrement = 0;
+		treesvg = new Smits.PhyloCanvas(treedata, model.nameswidth(), dom.treewrap.width(), newheight);
+		var svg = $("#tree>svg,#names>svg");
+		svg.mousedown(function(e){ //handle nodedrag on tree
+			e.preventDefault();
+			var dragged = e.target.tagName;
+	  		if(dragged=='circle' || dragged=='tspan'){
+	  			var raphid = dragged=='tspan'? e.target.parentNode.raphaelid : e.target.raphaelid;
+	  			var svgid = dragged=='tspan'? 'svg2' : 'svg1';
+	  			var draggednode = treesvg.svg[svgid].getById(raphid).data('node');
+	  			$("#page").one('mouseup',function(){ $("#page").unbind('mousemove'); });
+	  			var startpos = {x:e.pageX,y:e.pageY}, dragmode = false, helper;
+				$("#page").mousemove(function(evt){
+					var dx = evt.pageX-startpos.x, dy = evt.pageY-startpos.y;
+	  				if(Math.sqrt(dx*dx+dy*dy)>7){
+	  					if(!dragmode){
+	  						helper = movenode('drag',draggednode,dragged);
+	  						dragmode = true;
 	  					}
-	  		}); } });
-
-		}
-		else{ //no tree
-			$("#treewrap").css('background-color','transparent');
-			$("#notree").fadeIn(); $("#tree").css('box-shadow','-2px 0 2px #ccc inset');
-			$.each(names,function(name){
-				var nspan = $('<span style="height:'+model.boxh()+'px;font-size:'+model.fontsize()+'px">'+name+'</span>');
-				var hovertimer;
-				nspan.mouseenter(function(){
-					hovertimer = setTimeout(function(){
-						$label.css({
-							'font-size' : model.fontsize()+'px',
-							'top': nspan.offset().top+'px',
-							'left' : $("#right").position().left-14+'px'
-						});
-						$labelspan.css('margin-left',0-$names.innerWidth()+5+'px'); $labelspan.text(name);
-						$label.css('display','block'); setTimeout(function(){ $label.css('opacity',1) },50);
-					},800);
-				}); 
-				nspan.mouseleave(function(){ 
-					clearTimeout(hovertimer);
-					$label.css('opacity',0);
-					setTimeout(function(){$label.hide()},500); 
-				});
-				$names.append(nspan);
+	  					if(helper) helper.css({left:evt.pageX+15,top:evt.pageY-5});
+	  				}
+	  	}); } });
+	}
+	else if(!treedata && !zoom){ //no tree
+		dom.tree.empty(); dom.names.empty();
+		dom.treewrap.css('background-color','transparent');
+		$("#notree").fadeIn(); $("#tree").css('box-shadow','-2px 0 2px #ccc inset');
+		$.each(names,function(name){
+			var nspan = $('<span style="height:'+model.boxh()+'px;font-size:'+model.fontsize()+'px">'+name+'</span>');
+			var hovertimer;
+			nspan.mouseenter(function(){
+				hovertimer = setTimeout(function(){
+					$label.css({
+						'font-size' : model.fontsize()+'px',
+						'top': nspan.offset().top+'px',
+						'left' : $("#right").position().left-14+'px'
+					});
+					$labelspan.css('margin-left',0-dom.names.innerWidth()+5+'px'); $labelspan.text(name);
+					$label.css('display','block'); setTimeout(function(){ $label.css('opacity',1) },50);
+				},800);
+			}); 
+			nspan.mouseleave(function(){ 
+				clearTimeout(hovertimer);
+				$label.css('opacity',0);
+				setTimeout(function(){$label.hide()},500); 
 			});
-		}
-   		setTimeout(function(){$treewrap.fadeTo(300,1,'linear')},10);
-   	}
+			dom.names.append(nspan);
+		});
+	}
+   	if(dom.treewrap.css('display')=='none') setTimeout(function(){dom.treewrap.fadeTo(300,1,'linear')},10);
    	
 	var newwidth = visiblecols().length*model.boxw();
 	if(zoom){//keep sequence positioned in center of viewport after zoom
@@ -797,9 +865,9 @@ function redraw(zoom){
 		var top = ((newheight/oldheight)*(parseInt(dom.seq.css('margin-top'))-(visibleHeight/2)))+(visibleHeight/2);
 		if(top<0&&newheight>visibleHeight&&Math.abs(top)>newheight-visibleHeight){ top = visibleHeight-newheight; }//keep bottom edge grounded
 		if(top>0||newheight<visibleHeight){ top = 0; }//stick to top edge
-		if(model.zoomlevel()<3){ $("#treewrap").addClass('minimal'); } else { $("#treewrap").removeClass('minimal'); }
+		if(model.zoomlevel()<3){ dom.treewrap.addClass('minimal'); } else { dom.treewrap.removeClass('minimal'); }
 		dom.wrap.css('left',Math.round(left)); dom.seq.css('margin-top',Math.round(top));
-		$treewrap.animate({height:newheight,top:Math.round(top)},500,'linear');
+		dom.treewrap.animate({height:newheight,top:Math.round(top)},500,'linear');
 		if(model.treesource()){
 			$("#names svg").animate({'font-size':model.fontsize()},500,'linear');
 		}
@@ -810,8 +878,7 @@ function redraw(zoom){
 	dom.seq.css({ 'width':newwidth, 'height':newheight });
 	makeRuler();
 	makeCanvases(); makeImage();
-	if(first){ mCustomScrollbar(0,"easeOutCirc","auto","yes","yes",10); } else { $(window).trigger('resize'); }
-	first = false;
+	if(!dom.seqwindow.data("contentWidth")){ mCustomScrollbar(0,"easeOutCirc","auto","yes","yes",10); } else { $(window).trigger('resize'); }
 }
 
 function refresh(e,hidemenu){ //redraw tree & sequence
@@ -909,12 +976,12 @@ function makeImage(target){
 				canvas.width = colstep*model.boxw();
 				canvas.height = rowstep*model.boxh();
 				var endrow = rowdraws[r+'|'+c].row+rowstep>visiblerows().length ? visiblerows().length : rowdraws[r+'|'+c].row+rowstep;
-				//var curstart = new Date().getTime();
 				canvas.setAttribute('id',r+'|'+c);
 				var canv = canvas.getContext('2d');
 				//canv.clearRect(0,0,canvas.width,canvas.height);
 				while(rowdraws[r+'|'+c].canvasrow < endrow){
 					var data = sequences[visiblerows()[rowdraws[r+'|'+c].canvasrow]];
+					if(!data) continue; //no sequence data: skip
 					var endcol = rowdraws[r+'|'+c].col+colstep>data.length ? data.length : rowdraws[r+'|'+c].col+colstep;
 					for(var canvascol=c;canvascol<endcol;canvascol++){
 						seqletter = data[visiblecols()[canvascol]];
@@ -1000,9 +1067,9 @@ function movenode(drag,movednode,movedtype){ //Create 'move node' mode (tree bra
 	  	var draggerscale = maxscroll/($("#verticalDragger").height()-vertdragger.height());
 
 		function loop(rate){ //treescroll
-			var scrollto = parseInt($('#treewrap').css('top'))+rate;
+			var scrollto = parseInt(dom.treewrap.css('top'))+rate;
 	  		if(scrollto > 0) scrollto = 0; else if(Math.abs(scrollto) > maxscroll) scrollto = 0-maxscroll;
-    		$('#treewrap').stop(1).animate({top:scrollto}, 1000, 'linear', function(){ loop(rate) });
+    		dom.treewrap.stop(1).animate({top:scrollto}, 1000, 'linear', function(){ loop(rate) });
     		dom.seq.stop(1).animate({marginTop: scrollto}, 1000, 'linear');
     		vertdragger.stop(1).animate({top: (0-scrollto)/draggerscale}, 1000, 'linear');
 		}        
@@ -1376,7 +1443,7 @@ function seqinfo(e){ //character info tooltip (on sequence click)
 	var symb = typeof(sequences[rowid][col])=='undefined' ? '' : sequences[rowid][col];
 	symb = canvaslabels[symb]||symb;
 	var symbcanvas = typeof(symbols[symb])!='undefined'? symbols[symb]['refcanvas'] : '<span style="color:orange">'+symb+'</span>';
-	var name = typeof(leafs[rowid])=='undefined' ? '' : leafs[rowid].name;
+	var name = typeof(leafnodes[rowid])=='undefined' ? '' : leafnodes[rowid].name;
 	var content = $('<span style="color:orange">'+name+'</span><br>').add(symbcanvas).add('<span> row '+(y+1)+' position '+seqpos+' column '+(x+1)+suppl+'</span>');
 	return {content:content, row:x, col:y, startx:x*model.boxw(), starty:y*model.boxh()}
 }
@@ -1401,7 +1468,7 @@ function togglerows(e,id,action){ //show/hide seq. rows & tree leafs
 		for(var r=0;r<rowflags.length;r++){ if(rowflags[r]){ idarr.push(visiblerows()[r]); } } 
 	}//else: hide/show from tree
 	if(typeof(idarr) != 'object'){ idarr = [idarr]; }
-	for(var i=0;i<idarr.length;i++){ leafs[idarr[i]].hideToggle(action); }
+	for(var i=0;i<idarr.length;i++){ leafnodes[idarr[i]].hideToggle(action); }
 	refresh();
 }
 
@@ -1585,7 +1652,7 @@ function dialog(type,options){
 	} //import dialog
 	else if(type=='export'){
 		parseexport('fasta');
-		var tabmenu = $('<ul class="tabmenu"><li class="active"><img src="img/align.png" trgt="seqtab">Sequence</li><li trgt="treetab"><img src="img/tree.png">Tree</li></ul>');
+		var tabmenu = $('<ul class="tabmenu"><li class="active"><img src="img/seq.png" trgt="seqtab">Sequence</li><li trgt="treetab"><img src="img/tree.png">Tree</li></ul>');
 		tabmenu.children().click(function(){
 			var self = $(this);
 			self.parent().children().removeClass('active'); self.addClass('active');
@@ -1711,7 +1778,7 @@ function dialog(type,options){
 	}
 	else if(type=='jobstatus'){
 		if($("#jobstatus").length>0){ $("#jobstatus").trigger('mousedown');  return; }
-		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. You can realign the sequence or revert the tree modifications.<br><a class="button square red" onclick="console.log(exportmodel.treesnapshot)">Revert</a><a class="button square">Realign</a>';
+		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. You can realign the sequence or revert the tree modifications.<br><a class="button square red" onclick="replacetree()">Revert</a><a class="button square">Realign</a>';
 		var notediv = '<div class="sectiontitle" data-bind="visible:treealtered"><img src="img/info.png"><span>Notifications</span></div><div data-bind="visible:treealtered" class="sectiontxt">'+treenote+'</div>';
 		var jobslistdiv = '<div class="sectiontitle" data-bind="visible:sortedjobs().length>0"><img src="img/run.png"><span>Status of background alignment jobs</span></div><div class="insidediv" data-bind="visible:sortedjobs().length>0,foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>';
 		var contentdiv = $(notediv+jobslistdiv);
@@ -1842,7 +1909,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
         				if(Object.keys(filescontent).length==goodfilecount){//all files have been read in. Go parse.
         					uploadbtn.html('Files imported');
         					ajaxcalls = [];
-        					parseimport(infodiv);
+        					parseimport({dialog:infodiv});
         				} 
         			},
         			trycount : 0,
@@ -1881,7 +1948,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
     				filescontent[file.name] = (data);
         			if(Object.keys(filescontent).length==goodfilecount){//all files have been read in. Go parse.
         				uploadbtn.html('Files imported');
-        				var result = parseimport(uploadbtn);//import files&hide statuswindow
+        				var result = parseimport({dialog:uploadbtn});//import files&hide statuswindow
         				if(result){ //import succeeded: send confirmation to server
         					model.currentid(jobid);
         					communicate('writemeta',{id:jobid,key:'imported'});
@@ -1917,7 +1984,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
     				reader.onload = function(evt){
     					filescontent[file.name] = evt.target.result;
     					infodiv.parent().find("span.icon")[i].innerHTML = '<img src="img/tick.png" class="icn">';
-    					if(Object.keys(filescontent).length==goodfilecount){ uploadbtn.html('Files imported'); parseimport(infodiv) }
+    					if(Object.keys(filescontent).length==goodfilecount){ uploadbtn.html('Files imported'); parseimport({dialog:infodiv}) }
     				};  
     				reader.readAsText(file);
     			}
@@ -1960,7 +2027,7 @@ function rowborder(data,hiding){
 
 /* Initiation on page load */
 $(function(){
-	dom = { seqwindow:$("#seqwindow"),seq:$("#seq"),wrap:$("#wrap") }; //glob.ref. to dom elements
+	dom = { seqwindow:$("#seqwindow"),seq:$("#seq"),wrap:$("#wrap"),treewrap:$("#treewrap"),tree:$("#tree"),names:$("#names") }; //glob.ref. to dom elements
 	ko.applyBindings(model);
 	
 	$("#zoombtns").hover(function(){$("#zoomperc").fadeIn()},function(){$("#zoomperc").fadeOut()});
@@ -1984,8 +2051,8 @@ $(function(){
 		axis: "x", 
 		containment: 'parent',
 		drag: function(event, dragger) {
-			$("#tree").css('right',133-dragger.position.left);
-			$("#names").css('width',133-dragger.position.left);
+			dom.tree.css('right',133-dragger.position.left);
+			dom.names.css('width',133-dragger.position.left);
 		}
 	});
 	$("#namesborderDrag").hover(

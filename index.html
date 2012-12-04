@@ -36,8 +36,8 @@
 	   	  </div>
 	   </div>
 	   
-	   <div class="buttonblock" style="left:5%;margin-left:50px">
-	  		<a id="run" class="button run" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before"> Analyses</a>
+	   <div class="buttonblock" style="left:5%;margin-left:55px">
+	  		<a id="run" class="button run" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before">Analyses</a>
 	      	<div id="runwrap" class="buttonmenuwrap" style="top:52px">
 	      		<div class="menuborder"></div>
 	      		<div id="runmenu" class="buttonmenu"><ul data-bind="foreach:runmenu"><li data-bind="click:$parent.runclick"><span data-bind="text:n"></span></li></ul></div>
@@ -54,9 +54,13 @@
 	  </div>
 	  
 	  <div class="buttonblock" style="left:18%;margin-left:180px">
-	    <a id="historybtn" class="button undo redo"><img src="img/undo.png" class="before" style="vertical-align:6px"> history <img src="img/redo.png" class="after"></a>
+	    <a id="undobtn" class="button left" data-bind="html:svgicon('undo'),click:undo"></a><a id="historybtn" class="button middle" onclick="togglemenu('undomenu')"><span data-bind="fadeText:undoname"></span></a><a id="undobtn" class="button right" data-bind="html:svgicon('redo'),click:redo"></a>
 	    <div class="toptext">Actions history</div>
-	    <!-- <a id="historybtn" class="button undo redo"><span class="before" style="vertical-align:6px">&#x27F2;</span> history <span class="after">&#x27F3;</span></a> -->
+	    <div id="undowrap" class="buttonmenuwrap">
+	      	<div class="menuborder"></div>
+	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:undostack"><li data-bind="click:$parent.selectundo"><span data-bind="html:'<img src=\'img/'+type+'.png\' class=\'icn\'> '+name+'<span class=\'right\' title=\''+info+'\'>'+svgicon('info')+'</span>'"></span></li></ul></div>
+	      		<div class="topshadow"></div>
+	        </div>
 	  </div>
 	  
 	  <div class="buttonblock" style="left:21%;margin-left:300px" data-bind="fadevisible:statusbtn()!=''">
