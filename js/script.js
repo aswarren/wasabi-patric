@@ -51,7 +51,7 @@ var dom = {};
 var myModel = function(){ //main viewmodel
 	var self = this;
 	//rendering parameters
-	self.startfile = "testdata.xml";
+	self.startfile = "mindata.xml";
 	self.zoomlevel = ko.observable(10);
 	self.zoomperc = ko.computed(function(){ var l = self.zoomlevel(); return l==2 ? 'MIN' : l==20 ? 'MAX' : l*5+'%'; });
 	self.boxw = ko.computed(function(){ return parseInt(self.zoomlevel()*1.5); });
@@ -65,12 +65,18 @@ var myModel = function(){ //main viewmodel
 	self.selmodes = [{mode:'default',icon:'\u25FB'},{mode:'columns',icon:'\u25A5'},{mode:'rows',icon:'\u25A4'}];
 	self.selclass = ko.computed(function(){ return 'button '+self.selmode(); });
 	self.setmode = function(data){ self.selmode(data.mode); togglemenu('selectmodemenu','hide'); toggleselection(data.mode); };
-	self.filemenu = ['history','import','export','info'];
+	self.filemenu = ['library','import','export','info'];
 	self.fileclick = function(data){ dialog(data); togglemenu('filemenu','hide'); };
 	self.runmenu = [{n:'Make alignment',c:'align'},{n:'Make guidetree',c:'tree'},{n:'Compact columns',c:'compact'},{n:'Test alginment',c:'test'}];
 	self.runclick = function(data){ dialog(data.c); togglemenu('runmenu','hide'); };
-	//sequence type
+	//current data
 	self.currentid = ko.observable('');
+	self.parentid = ko.computed(function(){
+		var idend = self.currentid().lastIndexOf('/children/');
+		if(idend!=-1) return self.currentid().substring(0,idend);
+		else return '';
+	});
+	self.libdir = ko.observable('Main directory');
 	self.seqtype = ko.observable('residues');
 	self.colorscheme = ko.observable('taylor');
 	self.seqtype.subscribe(function(v){
@@ -136,23 +142,16 @@ var myModel = function(){ //main viewmodel
 				if(self.jobtimeout) clearTimeout(self.jobtimeout);
 				self.jobtimeout = setTimeout(function(){ communicate('alignstatus','','jobdata'); },1000); //update data in 1s
 			}
-			if(!str && $('#jobstatus').length>0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },1000); } //close empty jobstatus window
 		}
+		if(self.sortedjobs().length==0&&!self.treealtered()&&$("#jobstatus").length!=0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },1000); } //close empty status window
 		return str;
 	}).extend({throttle: 200});
-	//imported alignments list (history window)
+	//imported alignments list (library window)
 	self.sortanalysopt = [{t:'Name',v:'name'},{t:'Analysis ID',v:'id'},{t:'Start date',v:'starttime'},{t:'Last opened',v:'imported'},{t:'Last saved',v:'savetime'}];
 	self.sortanalysby = ko.observable('starttime');
 	self.sortedanalys = ko.computed(function(){ return sortdata('analysdata',self.sortanalysby()); }).extend({throttle:100});
-	self.additem = function(div){
-		div = $(div);
-		if(div.hasClass('itemdiv')){ div.css({'display':'none'}); div.fadeIn(800); }
-	};
-	self.removeitem = function(div){
-		if(div.tagName=='DIV'&&div.offsetHeight!=0){
-			$(div).fadeOut(300,function(){ $(this).remove(); });
-		}else{ $(div).remove(); }
-	};
+	self.additem = function(div){ if($(div).hasClass('itemdiv')) $(div).hide().fadeIn(800); };
+	self.removeitem = function(div){ $(div).remove(); };
 	//undo stack
 	self.undostack = ko.observableArray();
 	self.activeundo = ko.observable(''); //{name:'',type:'',data:{},undone:false}
@@ -164,39 +163,78 @@ var myModel = function(){ //main viewmodel
 	});
 	self.treesnapshot = '';
 	self.selectundo = function(data){
+		if(data==='firsttree') data = self.gettreeundo('first');
 		self.activeundo(data);
 		togglemenu('undomenu','hide');
 	};
 	self.addundo = function(undodata){
 		undodata.undone = false;
-		if(undodata.type='tree') undodata.info += ' Undo will also revert any subsequent tree modifications.'
+		if(undodata.type=='tree'&&undodata.info.indexOf('subsequent')==-1) undodata.info += ' Undo will also revert any subsequent tree modifications.';
 		self.undostack.unshift(undodata);
 		self.activeundo(undodata);
 	};
 	self.undo = function(){
 		var data = self.activeundo();
 		if(data.undone) return;
+		if(data.type=='tree'){
+			var undoindex = self.undostack.indexOf(data);
+			var restore = data===self.gettreeundo('first')? self.treesnapshot : (self.gettreeundo('prev',undoindex).data || self.treesnapshot);
+			treesvg.loaddata(restore);
+			self.gettreeundo('remove',undoindex);
+			if(restore == self.treesnapshot) self.treealtered(false);
+		}
 		self.undostack.remove(data);
 		data.undone = true;
 	};
 	self.redo = function(){
 		var data = self.activeundo();
 		if(!data.undone) return;
+		if(data.type=='tree'){
+			treesvg.loaddata(data.data);
+			if(data.data != self.treesnapshot) self.treealtered(true);
+		}
 		self.addundo(data);
+	};
+	self.gettreeundo = function(mode,index){
+		var start = mode=='prev'? index+1 : 0;
+		var end = mode=='remove'? index : self.undostack().length-1;
+		var found = false;
+		for(var i=end;i>=start;i--){
+			if(self.undostack()[i].type=='tree'){
+				found = self.undostack()[i];
+				if(mode=='first') break;
+				if(mode=='remove') self.undostack.splice(i,1);
+			} 
+		}
+		return found;
 	};
 };//myModel
 
 //model for file exporting (export window)
 var myExport = function(){
 	var self = this;
-	self.types = [{name:'fasta',fileext:'.fa',desc:'',hastree:false,interlace:false},{name:'nexus',fileext:'.nex',desc:'',hastree:true,interlace:true},{name:'Phylip',fileext:'.phy',desc:'',hastree:false,interlace:true},{name:'PAML',fileext:'.phy',desc:'Phylip format optimized for PAML',hastree:false,interlace:false},{name:'RAxML',fileext:'.phy',desc:'Phylip format optimized for RAxML',hastree:false,interlace:false}];
-	self.selected = ko.observable('fasta');
-	self.curitem = ko.computed(function(){ return self.types.filter(function(item){ return item.name == self.selected() })[0]; });
-	self.filename = ko.observable('exported');
+	self.categories = [
+		{name:'Sequence', formats:[{name:'fasta', variants:[{name:'fasta', ext:['.fa']} ]} ]}, 
+		{name:'Tree', formats:[ 
+			{name:'newick', variants:[
+				{name:'newick', ext:['.nwk','.tre','.tree']},
+				{name:'extended newick', ext:['.nhx'], desc:'Newick format with additional metadata (hidden nodes etc.)'}
+			]} 
+		]}
+	];
+	//{name:'Phylip',fileext:'.phy',desc:'',interlace:true}, {name:'PAML',fileext:'.phy',desc:'Phylip format optimized for PAML',hastree:false,interlace:false}, {name:'RAxML',fileext:'.phy',desc:'Phylip format optimized for RAxML',hastree:false,interlace:false};
+	self.category = ko.observable({});
+	self.format = ko.observable({});
+	self.variant = ko.observable({});
+	self.filename = ko.observable('exported_data');
+	self.fileext = ko.observable('.fa');
+	self.fileurl = ko.observable('');
 	self.incltree = ko.observable(false);
-	self.inclhidden = ko.observable(false);
+	self.inclancestral = ko.observable(false);
+	self.inclhidden = ko.observable(true);
 	self.interlaced = ko.observable(false);
-	self.maskwith = ko.observable('lowercase');
+	self.maskoptions = ['lowercase','N','X'];
+	self.masksymbol = ko.observable('lowercase');
 }
 
 //HTML element transitions when viewmodel data changes
@@ -204,14 +242,14 @@ ko.bindingHandlers.fadevisible = {
 	init: function(element){ $(element).css('display','none') },
     update: function(element, value){
         var value = ko.utils.unwrapObservable(value());
-        if (value == true) $(element).fadeIn(); else $(element).fadeOut();
+        if(value) $(element).fadeIn(); else $(element).fadeOut();
     }
 };
 ko.bindingHandlers.slidevisible = {
 	init: function(element){ $(element).css('display','none') },
     update: function(element, value){
         var value = ko.utils.unwrapObservable(value());
-        if (value == true) $(element).slideDown(); else $(element).slideUp();
+        if(value) $(element).slideDown(); else $(element).slideUp();
     }
 };
 ko.bindingHandlers.fadeText = {
@@ -229,10 +267,12 @@ var exportmodel = new myExport();
 //HTML rendering for running jobs (jobstatus window)
 var jobmodel = function(data){
 	ko.mapping.fromJS(data, {}, this);
-	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
+	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+(sclass||'')+'" style="'+(style||'')+'" title="'+(title||'')+'" onclick="'+action+'">'+name+'</a>'; };
 	
 	this.html = ko.computed(function() {
-    	if(this.imported()){ return 'Files from '+this.id()+'<br>have been imported. '+btnhtml('dialog(\'history\')','History','top:3px'); }
+		var idindex = this.id().lastIndexOf('/');
+		var shortid = idindex!=-1? this.id().substring(idindex+1) : this.id(); 
+    	if(this.imported()){ return 'Files of job '+shortid+'<br>have been imported. '+btnhtml('dialog(\'library\')','Library','top:3px'); }
         var status = this.status();
         var btn = '';
 		if(status!='running'){
@@ -243,23 +283,24 @@ var jobmodel = function(data){
 			}else{
 				var err = ((status!='0')?'Exit code '+status+'. ':'')+((!this.outfile())?'No result file. ':'')+' Check log for details.';
 				status = '<span style="color:red">Failed. </span><img class="icn" src="img/help.png" title="'+err+'"> ';
-				btn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','color:red','Delete data of job '+this.id(),'removebtn');
+				btn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','color:red','Delete data of job '+shortid,'removebtn');
+				if(this.parameters().indexOf('-updated')!=-1) model.treealtered(true); //realignment failed: revert status
 			}
 		}
-		else{ btn = btnhtml('dialog(\'terminate\',{id:\''+this.id()+'\',btn:this})','Kill','color:red','Terminate job '+this.id(),'removebtn'); }
+		else{ btn = btnhtml('dialog(\'terminate\',{id:\''+this.id()+'\',btn:this})','Kill','color:red','Terminate job '+shortid,'removebtn'); }
 		var now = new Date().getTime();
 		var endtime = status=='running' ? now/1000 : parseInt(this.lasttime());
 		var runningtime = numbertosize(endtime-parseInt(this.starttime()),'sec');
 		var lastdate = msectodate(this.lasttime());
 		var logline = this.log()? this.log() : 'Process finished '+lastdate;
-		return  '<span class="note">Name:</span> <span class="logline">'+this.name()+'<span class="fade"></span></span><br><span class="note">Status:</span> '+status+'<br><span class="note">Running time:</span> '+runningtime+btn+'<br><span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">File directory:</span> '+this.id()+'<br><span class="note">Feedback:</span> <span class="logline actiontxt" onclick="showfile(this,\''+this.logfile()+'\')" title="Last update '+lastdate+'. Click for full log.">'+logline+'<span class="fade"></span></span>';
+		return  '<span class="note">Name:</span> <span class="logline">'+this.name()+'<span class="fade"></span></span><br><span class="note">Status:</span> '+status+'<br><span class="note">Running time:</span> '+runningtime+btn+'<br><span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Job ID:</span> <span title="Folder path: '+this.id()+'">'+shortid+'</span><br><span class="note">Feedback:</span> <span class="logline actiontxt" onclick="showfile(this,\''+this.logfile()+'\')" title="Last update '+lastdate+'. Click for full log.">'+logline+'<span class="fade"></span></span>';
     }, this);
 }
 
-//HTML rendering for imported jobs (history window)
+//HTML rendering for imported jobs (library window)
 var analysmodel = function(data){
 	ko.mapping.fromJS(data, {}, this);
-	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+sclass+'" style="'+style+'" title="'+title+'" onclick="'+action+'">'+name+'</a>'; };
+	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+(sclass||'')+'" style="'+(style||'')+'" title="'+(title||'')+'" onclick="'+action+'">'+name+'</a>'; };
 	this.divh = '55px';
 	
     this.html = ko.computed(function(){
@@ -284,12 +325,18 @@ var analysmodel = function(data){
     		var removebtn = '';
     		imported += ' (broken)';
     	}
+    	if(this.hasOwnProperty('children')&&this.children()>0){
+    		var actclass = model.currentid()!=this.id()&&model.currentid().indexOf(this.id())!=-1? ' activeitem' : ''; //child open > color btn white
+    		var childbtn = btnhtml('communicate(\'getmeta\',{parentid:\''+this.id()+'\'},\'analysdata\')','<span class="svg">'+svgicon('children')+'</span> '+this.children(),'','View subanalyses','childbtn'+actclass);
+    	} else var childbtn = '';
     	var alignerdata = this.aligner().split(':');
-		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+imported+'<br><span class="note">File directory:</span> <span class="actiontxt" title="Toggle folder content" onclick="showfile(this,\''+this.id()+'\')">'+this.id()+'</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+saved+'<br><span class="note">Aligner:</span> <span class="label" title="Executable: '+alignerdata[1]+'">'+alignerdata[0]+'</span><br><span class="note">Parameters:</span> <span class="logline label" style="cursor:text" title="'+this.parameters()+'">'+this.parameters()+'<span class="fade"></span></span>'+removebtn+'<span class="actiontxt itemexpand" onclick="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC;</span></div>';
+    	var idend = this.id().lastIndexOf('/');
+		var folderid = idend!=-1? this.id().substring(idend+1) : this.id();
+		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+imported+'<br><span class="note">File directory:</span> <span class="actiontxt" title="Toggle folder content" onclick="showfile(this,\''+this.id()+'\')">'+folderid+'</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+saved+'<br><span class="note">Aligner:</span> <span class="label" title="Executable: '+alignerdata[1]+'">'+alignerdata[0]+'</span><br><span class="note">Parameters:</span> <span class="logline label" style="cursor:text" title="'+this.parameters()+'">'+this.parameters()+'<span class="fade"></span></span>'+childbtn+removebtn+'<span class="actiontxt itemexpand" onclick="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC;</span></div>';
     }, this);
 }
 
-function toggleitem(btn,starth){ //expand/contract job divs (history window)
+function toggleitem(btn,starth){ //expand/contract job divs (library window)
 	var itemdiv = $(btn).closest('div.itemdiv');
 	if(btn.innerHTML == '\u25BC'){ //expand itemdiv
 		itemdiv.css('height',itemdiv.children().first().height()+12+'px');
@@ -301,7 +348,7 @@ function toggleitem(btn,starth){ //expand/contract job divs (history window)
 	}
 }
 
-function showfile(btn,file){ //show file/folder content from server (history window)
+function showfile(btn,file){ //show file/folder content from server (library window)
 	var logdiv = $(btn).closest('div.itemdiv').next('div.logdiv');
 	if(logdiv.length==0){ //logdiv not yet created
 		logdiv = $('<div class="insidediv logdiv">');
@@ -335,40 +382,61 @@ function showfile(btn,file){ //show file/folder content from server (history win
 }
 
 
-function communicate(action,senddata,saveto){ //send and receive+save data from server (to data model)   fn(str,obj,[str|obj])
+function communicate(action,senddata,options){ //send and receive+save data from server (to data model)   fn(str,obj,[str|obj])
 	if(!action) return;
-	var optdata = new FormData();
-	optdata.append('action',action);
-	if(senddata) $.each(senddata,function(key,val){ optdata.append(key,val) });
+	var formdata = new FormData();
+	formdata.append('action',action);
+	if(action=='getmeta'){
+		if(!senddata.parentid&&model.parentid()) senddata = {parentid:model.parentid()};
+		else if(senddata.parentid=='main') senddata = '';
+	}
+	if(senddata) $.each(senddata,function(key,val){ formdata.append(key,val) });
 	$.ajax({
 		type: "POST",
 		url: 'backend.php',
-    	dataType: "text",
     	success: function(data){
-    		var endfunc = action=='writemeta'? function(){ communicate('getmeta','','analysdata'); } : '';
-    		if(typeof(saveto)=='string'){ //save server JSON data to local variable
+    		var endfunc = action=='writemeta'? function(){
+    			var idend = senddata.id.lastIndexOf('/children/');
+				var parentdir = idend!=-1? {parentid: senddata.id.substring(0,idend)} : {parentid: 'main'};
+    			communicate('getmeta',parentdir,'analysdata'); } : '';
+    			
+    		if(typeof(options)=='string'){ //save response data to 'serverdata' array
+    			var saveto = options;
     			if(typeof(serverdata[saveto])=='undefined'){
     				serverdata[saveto] = ko.mapping.fromJS(data,{key:function(item){ return ko.utils.unwrapObservable(item.id); }});
     			}
     			else{ ko.mapping.fromJSON(data,{},serverdata[saveto]);  }
     		}
-    		else if(typeof(saveto)=='object'){
-    			if(saveto.hasOwnProperty('btn')){
-    				data = $.parseJSON(data);
-    				if(typeof(data)=='string') saveto.btn.innerHTML = data;
-    				else if(data.file) saveto.btn.href = data.file;
-    				if($(saveto.btn).css('opacity')==0) $(saveto.btn).css('opacity',1);
+    		else if(typeof(options)=='object'){
+    			if(options.hasOwnProperty('btn')){
+    				try{ data = JSON.parse(data); } catch(e){ data = data.replace(/^'|'$/g, "") } //catch json parse error
+    				if(typeof(data)=='string') options.btn.innerHTML = data;
+    				else if(data.file) options.btn.href = data.file;
+    				if($(options.btn).css('opacity')==0) $(options.btn).css('opacity',1);
     			}
-    			if(saveto.hasOwnProperty('func')){ endfunc = function(){ saveto.func(data); }; }
+    			if(options.hasOwnProperty('func')){ endfunc = function(){ options.func(data) }; }
     		}
-    		if(endfunc){ setTimeout(endfunc,300); } //refresh local data
+    		else if(typeof(options)=='function'){ //save response data to ko.observable
+    			options(data);
+    		}
+    		
+    		if(action=='getmeta'){
+    			if(senddata.parentid){
+    				var dirtrail = senddata.parentid.replace(/\/children\//g,' &#x25B8; ');
+    				var idend = senddata.parentid.lastIndexOf('/children/');
+					var parentdir = idend!=-1? '{parentid:\''+senddata.parentid.substring(0,idend)+'\'}':'{parentid:\'main\'}';
+    				model.libdir('Main &#x25B8; '+dirtrail+' <br><a class="button small square" onclick="communicate(\'getmeta\','+parentdir+',\'analysdata\')">&#x25C1; Parent </a>');
+    			}
+    			else model.libdir('Main directory');
+    		}
+    		if(endfunc){ setTimeout(endfunc,500); } //refresh local data
     	},
-    	trycount: 0,
     	error: function(xhrobj,status,msg){
     		if(typeof(saveto)=='object' && saveto.hasOwnProperty('btn')){ saveto.btn.innerHTML = 'Failed'; }
-    		console.log('Server communication error');
+    		if(options.btn) setTimeout(function(){ communicate('alignstatus','','jobdata'); communicate('getmeta',{parentid:senddata.parentid},'analysdata'); }, 500);
     	},
-    	data: optdata,
+    	data: formdata,
+    	dataType: "text",
         cache: false,
         contentType: false,
         processData: false
@@ -381,6 +449,7 @@ function togglemenu(id,action,data){ //show/hide dropdown menus
 	if(typeof(action)=='undefined' || action==''){ var action = menudiv.parent().css('display')=='none' ? 'show' : 'hide'; }
 	if(action=='show'){
 		menudiv.parent().css('display','block');
+		if(menudiv.height()==0){ menudiv.parent().css('display','none'); return; }
 		setTimeout(function(){ menudiv.css('margin-top','-1px') },50);
 	}
 	else if (action=='hide'){
@@ -417,22 +486,6 @@ function msectodate(sec){
 }
 
 /* Input file parsing */
-
-function replacetree(newick){
-	if(!newick) newick = model.treesnapshot.nwk;
-	if(newick){ treedata = newick; } else { return; }
-	console.log(newick);
-	visiblerows.removeAll();
-	var newheight = model.treesnapshot.vrows*model.boxh();
-	treesvg = new Smits.PhyloCanvas(treedata, model.nameswidth(), dom.treewrap.width(), newheight);
-	if(newick == model.treesnapshot){ //reverting to unaltered tree
-		model.undostack.remove(function(item){ return item.type=='tree' });
-		if(model.activeundo().type=='tree') model.activeundo();
-	}
-	redraw();
-}
-
-
 function parseimport(options){ //options{dialog:jQ,update:true}
 	if(!options) options = {};
 	var errors = [], notes = [], treeoverwrite = false, seqoverwrite = false;
@@ -520,7 +573,6 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 		if(!format) format = 'newick';
 		if(format=='newick'){ //remove whitespace
 			if(Tseqformat=='fasta'){ //match fasta name truncating
-			console.log('fasta');
 				//treetxt = treetxt.replace(/(['"]\w+)[^'"]+(['"])/g,"$1$2");
 			}
 			treetxt = treetxt.replace(/[\n\r#]+/g,'')+';';
@@ -611,8 +663,8 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 	});
 	
 	var namearr = [];
-	if($.isEmptyObject(Tsequences) && $.isEmptyObject(sequences)){ errors.push("Sequence data is missing") }
-	else if($.isEmptyObject(sequences)){ namearr = Object.keys(Tsequences); }
+	if($.isEmptyObject(Tsequences) && $.isEmptyObject(sequences)) errors.push("Sequence data is missing");
+	else if(!$.isEmptyObject(Tsequences)) namearr = Object.keys(Tsequences);
 	
 	if($.isEmptyObject(Ttreedata) && $.isEmptyObject(treedata)){
 		//no tree: fill placeholders (otherwise done by jsPhyloSVG)
@@ -627,7 +679,7 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 		var treetype = Ttreedata.phyloxml ? 'phyloxml' : 'newick';
 		var nodecount = treetype=='phyloxml' ? $(file).find("clade").length : Ttreedata.newick.match(/\(/g).length;
 		var leafcount = treetype=='phyloxml' ? $(file).find("name").length : Ttreedata.newick.match(/,/g).length+1;
-		if(leafcount > namearr.length && !$.isEmptyObject(Tsequences)){ notes.push("Some tree leafs has no sequence data"); }
+		if(leafcount > namearr.length && !$.isEmptyObject(Tsequences)) notes.push("Some tree leafs has no sequence data");
 		/*$.each(namearr,function(indx,name){
 			if(Ttreedata[treetype].indexOf(name)==-1){ errors.push("Some sequence names missing from the tree <br> ('"+name+"' etc.)"); return false; }
 		});*/
@@ -644,40 +696,40 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 			setTimeout(function(){ makewindow('File import warnings',['<br>',ul,'<br>'],{btn:'OK',icn:'info.png'}); }, 3000); 
 		}
 		
-	  if(Tsequences){ //sequence data drop in
-		Tminseqlen = Tsequences[namearr[0]].length;
-		var longestseq = '', hasdot = false;
-		for(var n=0;n<namearr.length;n++){ //count sequence lengths
-			var tmpseq = Tsequences[namearr[n]].join('');
-			if(!hasdot && tmpseq.indexOf('.')!=-1) hasdot = true;
-			if(tmpseq.length >= Talignlen){ Talignlen = tmpseq.length }
-			tmpseq = tmpseq.replace(/-/g,'');
-			var seqlen = tmpseq.length;
-   			if(seqlen >= Tmaxseqlen){ Tmaxseqlen = seqlen; longestseq = tmpseq; }
-   			if(seqlen <= Tminseqlen){ Tminseqlen = seqlen; }
-		}
-		model.hasdot(hasdot);
-		var dnachars = new RegExp('['+alphabet.dna.slice(0,-2).join('')+'_.:?!'+']','ig');
-		longestseq = longestseq.replace(dnachars,''); //check if a sequence consists of DNA symbols
-		if(longestseq.length==0){ model.seqtype('dna') } else if(longestseq.replace(/u/ig,'').length==0){ model.seqtype('rna') } else{ model.seqtype('residues') }
-		sequences = Tsequences; model.totalseqcount(namearr.length); model.alignlen(Talignlen);
-		model.minseqlen(Tminseqlen); model.maxseqlen(Tmaxseqlen); idnames = Tidnames;
-		model.seqsource(Tseqsource); maskedcols = [];
-		visiblecols.removeAll(); for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark visible columns
-		model.undostack.remove(function(item){ return item.type=='seq'} );
-		makecolors();
-	  }
+	  	if(!$.isEmptyObject(Tsequences)){ //sequence data drop in
+			Tminseqlen = Tsequences[namearr[0]].length;
+			var longestseq = '', hasdot = false;
+			for(var n=0;n<namearr.length;n++){ //count sequence lengths
+				var tmpseq = Tsequences[namearr[n]].join('');
+				if(!hasdot && tmpseq.indexOf('.')!=-1) hasdot = true;
+				if(tmpseq.length >= Talignlen){ Talignlen = tmpseq.length }
+				tmpseq = tmpseq.replace(/-/g,'');
+				var seqlen = tmpseq.length;
+   				if(seqlen >= Tmaxseqlen){ Tmaxseqlen = seqlen; longestseq = tmpseq; }
+	   			if(seqlen <= Tminseqlen){ Tminseqlen = seqlen; }
+			}
+			model.hasdot(hasdot); model.currentid('');
+			var dnachars = new RegExp('['+alphabet.dna.slice(0,-2).join('')+'_.:?!'+']','ig');
+			longestseq = longestseq.replace(dnachars,''); //check if a sequence consists of DNA symbols
+			if(longestseq.length==0){ model.seqtype('dna') } else if(longestseq.replace(/u/ig,'').length==0){ model.seqtype('rna') } else{ model.seqtype('residues') }
+			sequences = Tsequences; model.totalseqcount(namearr.length); model.alignlen(Talignlen);
+			model.minseqlen(Tminseqlen); model.maxseqlen(Tmaxseqlen); idnames = Tidnames;
+			model.seqsource(Tseqsource); maskedcols = [];
+			visiblecols.removeAll(); for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark visible columns
+			model.undostack.remove(function(item){ return item.type=='seq'} );
+			makecolors();
+	  	}
 		
-	  if(Ttreedata){ //tree data drop in
-	  	treedata = Ttreedata; model.treesource(Ttreesource); model.nodecount(nodecount); model.leafcount(leafcount);
-	  	model.treesnapshot = ''; model.undostack.remove(function(item){ return item.type=='tree'} );
-	  }	
+	  	if(!$.isEmptyObject(Ttreedata)){ //tree data drop in
+	  		treedata = Ttreedata; model.treesource(Ttreesource); model.nodecount(nodecount); model.leafcount(leafcount);
+	  		model.treesnapshot = ''; model.undostack.remove(function(item){ return item.type=='tree'} );
+	  		if(!$.isEmptyObject(treesvg)) treesvg.loaddata(treedata.phyloxml||treedata.newick);
+	  	}	
 	  
-	  	model.activeundo('');
-   	  	redraw();
+	  	model.activeundo(''); model.treealtered(false);
+   	  	if($.isEmptyObject(treesvg)) redraw();
    	  	return true;
-	}
-	else { //diplay errors, no import
+	} else { //diplay errors, no import
 		var ul = document.createElement("ul");
 		$(ul).css('color','red');
 		$.each(errors,function(j,err){ $(ul).append("<li>"+err+"</li>") });
@@ -689,7 +741,17 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 
 /* Output file parsing */
 function parseexport(filetype,options){
-	if(typeof(options)=='undefined'){ options={} }
+	var usemodel = false;
+	if(!filetype&&!options){ //exportwindow: use datamodel
+		usemodel = true;
+		exportmodel.fileurl('');
+		var filetype = exportmodel.format().name;
+		var options = {};
+		options.masksymbol = exportmodel.masksymbol()=='lowercase'? false : exportmodel.masksymbol();
+		options.includetree = exportmodel.incltree();
+		options.tags = exportmodel.variant().name&&(exportmodel.variant().name=='extended newick');
+		options.includeanc = exportmodel.inclancestral();
+	} else if(!options) var options = {};
 	var output = '', ids = [], regexstr = '', dict = {};
 	
 	if(options.masksymbol){ $.each(alphabet[model.seqtype()],function(i,letter){ //translation for masked positions
@@ -703,15 +765,12 @@ function parseexport(filetype,options){
 	var translate = regexstr ? function(s){ return dict[s] || s; } : '';
 	
 	if(filetype=='newick'||options.includetree){
-		var newick = treesvg.data.root.write();
-		var treefile = options.includeanc? newick : newick.replace(/\#\d+\#/g,'');
-		$.each(names,function(id,name){ //id=>name in treefile
-			treefile = treefile.replace(id+':',name+':');
-		}); 
+		var treefile = treesvg.data.root.write(options.tags,!options.includeanc); 
 	}else{ var treefile = ''; }
 	
 	if(options.includeanc) ids = Object.keys(sequences); else ids = Object.keys(leafnodes);
 	var specount = ids.length; var ntcount = model.alignlen();
+	
 	if(filetype=='fasta'){
 		$.each(ids,function(j,id){
 			output += '>'+id+"\n";
@@ -727,6 +786,12 @@ function parseexport(filetype,options){
 		});
 	}
 	else if(filetype=='newick'){ output = treefile; }
+	
+	if(usemodel){
+		$('#exportedwindow .paper').text(output);
+		$('#exportwrap').addClass('flipped');
+		communicate('makefile',{filename:exportmodel.filename()+exportmodel.fileext(),filedata:output},exportmodel.fileurl);
+	}
 	return output;
 }
 
@@ -981,7 +1046,7 @@ function makeImage(target){
 				//canv.clearRect(0,0,canvas.width,canvas.height);
 				while(rowdraws[r+'|'+c].canvasrow < endrow){
 					var data = sequences[visiblerows()[rowdraws[r+'|'+c].canvasrow]];
-					if(!data) continue; //no sequence data: skip
+					if(!data){ rowdraws[r+'|'+c].canvasrow++; continue; }//no sequence data: skip
 					var endcol = rowdraws[r+'|'+c].col+colstep>data.length ? data.length : rowdraws[r+'|'+c].col+colstep;
 					for(var canvascol=c;canvascol<endcol;canvascol++){
 						seqletter = data[visiblecols()[canvascol]];
@@ -1181,16 +1246,16 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     	nodeicon.mouseenter(function(e){ //node info
     		var nodeul = $('<ul>'); if(node.children.length) nodeul.append('<li>Visible leaves: '+node._countAllChildren+'</li>');
     		if(node._countAllHidden) nodeul.append('<li>Hidden leaves: '+node._countAllHidden+'</li>');
-    		nodeul.append('<li>Branch length: '+node.len+'</li>','<li>Length from root: '+node.lenFromRoot+'</li>','<li>Levels from root: '+node.level+'</li>');
+    		nodeul.append('<li>Branch length: '+(Math.round(node.len*1000)/1000)+'</li>','<li>Length from root: '+(Math.round(node.lenFromRoot*1000)/1000)+'</li>','<li>Levels from root: '+node.level+'</li>');
     		if(node.confidence) nodeul.append('<li>Branch support: '+node.confidence+'</li>');
     		var nodetip = tooltip(e,'',{target:nodeicon,data:nodeul[0],arrow:'left',style:'nomenu'});
     		nodeicon.one('mouseleave',function(){ hidetooltip(nodetip) });
     	});
     	nodetitle.append(nodeicon);
-    	tiptitle.html(title);
+    	tiptitle.html(node.parent?title:'Root');
     	tiptitle.append(nodetitle);
     	var ul = $('<ul>');
-    	var hideli = $('<li class="arr"><span class="svgicon" title="Collapse node and its children">'+svgicon('hide')+'</span>Hide this node <span class="right">\u25B8</span></li>');
+    	var hideli = $('<li class="arr" '+(node.parent?'':'style="color:#888"')+'><span class="svgicon" title="Collapse node and its children">'+svgicon('hide')+'</span>Hide this node <span class="right">\u25B8</span></li>');
     	hideli.click(function(){ node.hideToggle(); refresh('','menu'); });
     	var hidemenu = {};
     	$.each(node.children,function(i,child){ //child nodes submenu
@@ -1226,12 +1291,12 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     	} else var ancli = '';
     	var swapli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Swap places of child nodes">'+svgicon('swap')+'</span>Swap children</li>');
     	swapli.click(function(){ node.swap(); refresh(); });
-    	var moveli = $('<li><span class="svgicon" title="Graft this node to another branch in the tree">'+svgicon('move')+'</span>Move node</li>');
-    	moveli.click(function(){ movenode('',node,'circle'); });
-    	var rerootli = $('<li><span class="svgicon" title="Place this node as the tree outgroup">'+svgicon('root')+'</span>Place root here</li>');
-    	rerootli.click(function(){ node.reRoot(); refresh(); });
-    	var remli = $('<li><span class="svgicon" title="Remove this node and its children from the tree">'+svgicon('trash')+'</span>Remove node</li>');
-    	remli.click(function(){ node.remove(); refresh(); });
+    	var moveli = node.parent? $('<li><span class="svgicon" title="Graft this node to another branch in the tree">'+svgicon('move')+'</span>Move node</li>') : '';
+    	if(moveli) moveli.click(function(){ movenode('',node,'circle'); });
+    	var rerootli = node.parent? $('<li><span class="svgicon" title="Place this node as the tree outgroup">'+svgicon('root')+'</span>Place root here</li>') : '';
+    	if(rerootli) rerootli.click(function(){ node.reRoot(); refresh(); });
+    	var remli = node.parent? $('<li><span class="svgicon" title="Remove this node and its children from the tree">'+svgicon('trash')+'</span>Remove node</li>') : '';
+    	if(remli) remli.click(function(){ node.remove(); refresh(); });
     	var expli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Export this subtree in newick format">'+svgicon('file')+'</span>Export data</li>');
     	expli.click(function(){ console.log(node.write()); hidetooltip(tipdiv); });
     	ul.append(hideli,ancli,swapli,moveli,rerootli,remli,expli);
@@ -1273,6 +1338,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
    	  }
    }
    else{ //tooltip
+		if(!node.parent&&node.len){ title = 'Root node'; }
     	tiptitle.empty().append(title);
     	if(node.nodeType) $(node).mouseleave(function(){ hidetooltip(tipdiv); });
     	else if(!node.edgeCircleHighlight&&!options.nohide) setTimeout(function(){ hidetooltip(tipdiv) },options.autohide||3000); //self-hide
@@ -1555,32 +1621,36 @@ function makewindow(title,content,options,container){ //(string,array(,obj{flips
 	titlediv.html(title);
 	$.each(content,function(i,val){ contentdiv.append(val) });
 	windowdiv.append(headerdiv,contentdiv,titlediv,closebtn);
-	if($('#page>div.popupwindow').length>0){ //keep a new window top of other windows
-		var maxZ = Math.max.apply(null, $.map($('#page>div.popupwindow'), function(e,i){ return parseInt($(e).css('z-index'))||1; }));
+	
+	var dragdiv = container||windowdiv;
+	var toFront = function(windiv,first){ //bring window on top
+		var maxz = Math.max.apply(null, $.map($('#page>div.popupwindow,div.popupwrap'), function(e,i){ return parseInt($(e).css('z-index'))||1; }));
+		var curz = parseInt($(windiv).css('z-index'));
+		if((curz<maxz) || (curz==maxz&&first)) $(windiv).css('z-index',maxz+1);
+    }
+	if($('#page>div.popupwindow').length>0){ //place new window
+		toFront(dragdiv,'first');
 		var pos = $('#page>div.popupwindow').last().position();
-		windowdiv.css({'z-index':maxZ+1,'top':pos.top+20+'px','left':pos.left+20+'px'});
+		dragdiv.css({'top':pos.top+20+'px','left':pos.left+20+'px'});
 	}
-	if(container){ container.append(windowdiv); var dragdiv = container; } //add window to DOM
+	if(container){ container.append(windowdiv); } //add window to DOM
 	else{
-		$("#page").append(windowdiv); var dragdiv = windowdiv;
-		windowdiv.mousedown(function(){ //keep selected window top of other windows
-			var maxZ = Math.max.apply(null, $.map($('#page>div.popupwindow'), function(e,i){ return parseInt($(e).css('z-index'))||1; }));
-			if(parseInt($(this).css('z-index')) < maxZ) $(this).css('z-index',maxZ+1);
-    	});
+		$("#page").append(windowdiv);
 	}
+	dragdiv.mousedown(function(){ toFront(dragdiv) });
 	if(container && windowdiv.width()>container.width()) container.css('width',windowdiv.width()+'px');
 	if(container && windowdiv.height()>container.height()) container.css('height',windowdiv.height()+'px');
-	setTimeout(function(){ //add lag to get correct dimensions
+	setTimeout(function(){
 	  	dragdiv.draggable({ //make window draggable by its title
 			handle : "div.windowtitle",
 			containment : [10,10,$("#page").width()-dragdiv.width()-20,$("#page").height()-dragdiv.height()-10]
-	}); },600);
+	}); },600); //add lag to get window dimensions
     if(options.backfade){ //make stuff visible
     	shade.css('display','block');
     	setTimeout(function(){ shade.css('opacity',1) },50);
     	setTimeout(function(){ dragdiv.addClass('zoomed') },300);
     }
-    else if(!container){ setTimeout(function(){ dragdiv.addClass('zoomed') },50); }
+    else{ setTimeout(function(){ dragdiv.addClass('zoomed') },50); }
 	return windowdiv;
 }
 
@@ -1592,7 +1662,7 @@ function dialog(type,options){
 		var infodiv = $("<div>");
 		var fileroute = window.File && window.FileReader && window.FileList ? 'localread' : 'upload';
 		var filedrag = $('<div class="filedrag">Drag files here</div>');
-		filedrag.bind('dragover',function(evt){
+		filedrag.bind('dragover',function(evt){ //file drag area
 			filedrag.addClass('dragover');
 			evt.stopPropagation();
     		evt.preventDefault();
@@ -1651,28 +1721,33 @@ function dialog(type,options){
 		var flipdialog = makewindow("Import data",[infodiv],{backfade:false,flipside:'back',icn:'import.png'},dialogwrap);
 	} //import dialog
 	else if(type=='export'){
-		parseexport('fasta');
-		var tabmenu = $('<ul class="tabmenu"><li class="active"><img src="img/seq.png" trgt="seqtab">Sequence</li><li trgt="treetab"><img src="img/tree.png">Tree</li></ul>');
-		tabmenu.children().click(function(){
-			var self = $(this);
-			self.parent().children().removeClass('active'); self.addClass('active');
-			$("#exporttabs .tabcontent").removeClass('shown');
-			$("#"+self.attr('trgt')).addClass('shown');
-		});
-		var tabdivs = $('<div id="exporttabs" class="tabdivs"><div id="seqtab" class="tabcontent shown">'+
-		'<br>Name: <input type="text" class="hidden" title="Click to edit" data-bind="value:filename"><span data-bind="text:curitem().fileext"></span>'+
-		'<br>File format: <select data-bind="options:types,optionsText:\'name\',optionsValue:\'name\',value:selected"></select> <img class="note" data-bind="text:curitem().desc">'+
-		'<br><input type="checkbox" data-bind="visible:curitem().hastree,checked:incltree"> <span class="label" title="Include tree data" data-bind="visible:curitem().hastree">Include tree</span>'+
-		'  <input type="checkbox" data-bind="visible:curitem().interlace,checked:interlaced"><span class="label" title="Interlace sequence data rows" data-bind="visible:curitem().interlace">Interlaced</span>'+
-		'<hr><span>Mark masked characters with: </span><select data-bind="options:[\'lowercase\',\'N\',\'X\'],value:maskwith"></select>'+
-		'<br><input type="checkbox" data-bind="checked:inclhidden">Include hidden columns'+
-		'<br><div class="exportinfo"></div><a class="button" onclick="exportfile(\'seq\',this)">Export</a></div>'+
-		'<div id="treetab" class="tabcontent"></div></div>');
-		var dialogdiv = makewindow("Export data",[tabmenu,tabdivs],{icn:'export.png',id:'exportwindow'});
-		ko.applyBindings(exportmodel,dialogdiv[0]);
+		if($("#exportwrap").length>0){ $("#exportwrap").click(); return; } //bring window to front
+		var exportwrap = $('<div id="exportwrap" class="popupwrap zoomin">');
+		$("#page").append(exportwrap);
+		var frontcontent = $('<div class="sectiontitle" style="min-width:320px"><img src="img/file.png"><span>File</span></div>'+
+		'<span class="cell">Data<hr><select data-bind="options:categories, optionsText:\'name\', value:category"></select></span>'+
+		'<span class="cell" data-bind="with:category,fadevisible:category().formats.length>0">Format<hr><span data-bind="visible:formats.length==1,text:formats[0].name"></span><select data-bind="visible:formats.length>1, options:formats, optionsText:\'name\', value:$parent.format"></select></span>'+
+		'<span class="cell" data-bind="with:format,fadevisible:format().variants.length>1">Variant<hr><select data-bind="options:variants, optionsText:\'name\', value:$parent.variant"></select></span> '+
+		'<span class="svgicon" style="margin-left:-8px" data-bind="fadevisible:variant().desc,attr:{title:variant().desc}">'+svgicon('info',{fill:'#666'})+'</span><br>'+
+		'&nbsp;Name: <input type="text" class="hidden" style="width:200px;text-align:right;margin:0" title="Click to edit" data-bind="value:filename"><span style="font-size:17px" data-bind="visible:variant().ext.length<2,text:variant().ext[0]"></span><select data-bind="visible:variant().ext.length>1, options:variant().ext, value:fileext"></select><br>'+
+		'<br><div class="sectiontitle"><img src="img/gear2.png"><span>Options</span></div>'+
+		'<input type="checkbox" data-bind="checked:inclancestral"> Include ancestral node data'+
+		//'  <input type="checkbox" data-bind="visible:curitem().interlace,checked:interlaced"><span class="label" title="Interlace sequence data rows" data-bind="visible:curitem().interlace">Interlaced</span>'+
+		'<div data-bind="slidevisible:category().name.indexOf(\'Seq\')!=-1">&nbsp;Mark masked sequence with <select data-bind="options:maskoptions,value:masksymbol"></select><br>'+
+		'<input type="checkbox" data-bind="checked:inclhidden" disabled>Include hidden columns </div></div>');
+		var makebtn = $('<a class="button" data-bind="visibility:format">Make file</a>');
+		makebtn.click(function(){ parseexport(); });
+		var frontwindow = makewindow("Export data",frontcontent,{icn:'export.png',id:'exportwindow',flipside:'front',btn:makebtn},exportwrap);
+		var backcontent = $('<div class="sectiontitle"><img src="img/file.png"><span data-bind="text:filename()+fileext()"></span></div>'+
+		'<div class="insidediv" style="max-width:400px;max-height:150px;overflow:auto"><div class="paper"></div></div>');
+		var backbtn = $('<a class="button" style="padding-left:17px;margin-top:25px">&#x25C0; Back</a>');
+		backbtn.click(function(){ $("#exportwrap").removeClass('flipped') });
+		var downloadbtn = $('<a class="button" style="margin-left:40px;margin-top:25px" data-bind="visible:fileurl,attr:{href:fileurl}">Download</a>');
+		var backwindow = makewindow("Export data",[backcontent,backbtn,downloadbtn],{icn:'export.png',id:'exportedwindow',flipside:'back'},exportwrap);
+		ko.applyBindings(exportmodel,exportwrap[0]);
 	}
 	else if(type=='info'){
-		if($("#infowindow").length>0){ $("#infowindow").trigger('mousedown');  return; }
+		if($("#infowindow").length>0){ $("#infowindow").trigger('mousedown');  return; } //bring window to front
 		var list = $("<ul>");
 		if(model.treesource()){
 			list.append('<li>Number of nodes: <span data-bind="text:nodecount"></span></li>');
@@ -1700,12 +1775,16 @@ function dialog(type,options){
 		});
 		var opttitlespan = $('<span class="actiontxt" title="Click to toggle options">Alignment options</span>').click(function(){expbtn.click()});
 		var infospan = $('<span class="note" style="display:none;margin-left:20px">Hover options for description</span>');
-		var nameinput = $('<input type="text" class="hidden" value="PRANK alignment" title="Click to edit">');
+		var nameinput = $('<input type="text" class="hidden" value="Prank alignment" title="Click to edit">');
 		var namespan = $('<span class="note">Descriptive name: </span>').append(nameinput);
 		var opttitle = $('<div>').append(expbtn,opttitlespan,infospan);
 		var optdiv = $('<div class="insidediv" style="display:none">');
 		var treecheck = model.treesource()?'':'checked="checked"';
-		var optform = $('<form id="alignoptform" onsubmit="return false">'+
+		var parentoption = model.parentid()?'<option value="sibling" checked="checked">branch parent</option>':'';
+		var writetarget = model.currentid()?'Aligned data will <select name="writemode">'+parentoption+
+		'<option value="child" '+(model.parentid()?'':'checked="checked"')+'>branch current</option>'+
+		'<option value="overwrite">overwrite current</option></select> analysis files in the <a onclick="dialog(\'library\')">library</a>.<br><br>':'';
+		var optform = $('<form id="alignoptform" onsubmit="return false">'+writetarget+
 		'<input type="checkbox" name="newtree" data-bind="enable:treesource" '+treecheck+'><span class="label" title="Checking this option builds a new guidetree for the sequence alignment process (otherwise uses the current tree).">make new tree</span>'+
 		'<br><input type="checkbox" checked="checked" name="anchor"><span class="label" title="Use Exonerate anchoring to speed up alignment">alignment anchoring</span> '+
 		'<br><input type="checkbox" name="e"><span class="label" title="Checking this option keeps current alignment intact (pre-aligned sequences) and only adds sequences for ancestral nodes.">keep current alignment</span>'+
@@ -1717,99 +1796,108 @@ function dialog(type,options){
 		'<br><span class="label" title="Default values are empirical, based on the input data." data-bind="visible:isdna">DNA base frequencies</span> <input type="text" name="A" placeholder="A" data-bind="visible:isdna"><input type="text" name="C" placeholder="C" data-bind="visible:isdna"><input type="text" name="G" placeholder="G" data-bind="visible:isdna"><input type="text" name="T" placeholder="T" data-bind="visible:isdna"><input type="hidden" name="dots" value="true"></form>');
 		optdiv.append(optform);
 		var alignbtn = $('<a class="button">Start alignment</a>');
-		alignbtn.click(function(){
-			var formel = optform[0];
-			var optdata = new FormData(formel);
-			optdata.append('name',nameinput.val());
-			optdata.append('action','startalign');
-			optdata.append('fasta',parseexport('fasta'));
-			if(treedata.newick && !formel['newtree']['checked']){ optdata.append('newick',parseexport('newick')); }
-			$.ajax({
-        			url: 'backend.php',
-        			type: 'POST',
-        			dataType: 'text',
-        			xhr: function() {
-            			myXhr = $.ajaxSettings.xhr();
-            			if(myXhr.upload){ //handling fileupload progress
-                			//myXhr.upload.addEventListener('progress',uploadprogress, false);
-            			}
-            			return myXhr;
-        			},
-        			beforeSend: function(){
-        				alignbtn.html('Sending job');
-        				alignbtn.css({'opacity':0.6,'cursor':'default'});
-        				alignbtn.unbind('click');
-        			},
-        			success: function(data){  //job sent to server. Show status.
-        				optdiv.slideUp();
-        				var job = $.parseJSON(data);
-        				optdiv.empty().append('<b>Alignment job started</b><br>');
-        				optdiv.append('<div>Job ID: '+job.id+'<br>Started: '+msectodate(job.starttime)+'</div>');
-        				optdiv.next().after('<span class="note">Job status can be followed via toolbar.</span>');
-        				optdiv.slideDown();
-        				setTimeout(function(){
-        					opttitle.html('<img class="icn" src="img/info.png"> Status of alignment job');
-        					opttitle.css('cursor','default');
-        					alignbtn.html('OK');
-        					alignbtn.css({'opacity':1,'cursor':'pointer'});
-        					alignbtn.closest("div.popupwindow").find("img.closebtn").click();
-        					communicate('alignstatus','','jobdata');
-        				},500);
-        			},
-        			error: function(xhrobj,status,msg){
-        				if(status=='OK' && xhrobj.responseText){ this.success(xhrobj.responseText); return; }
-        				alignbtn.html('Server error <img src="img/help.png" title="'+msg+'" class="icn">');
-        				console.log('Alignment job error: '+status+'|'+msg);
-        				if(xhrobj.responseText){ console.log(xhrobj.responseText); }
-        			},
-        			data: optdata,
-        			cache: false,
-        			contentType: false,
-        			processData: false
-    			});
-    		var oldjobcount = serverdata['jobdata']().length;
-    		setTimeout(function(){
-    			if(serverdata['jobdata']().length==oldjobcount){ communicate('alignstatus','','jobdata'); }//no update made, fetch data update
-    			alignbtn.closest("div.popupwindow").find("img.closebtn").click(); //close alignment setup winow
-    		},5000);
-		});
-		var dialogdiv = makewindow("Make alignment",['Currently imported data will be aligned with <a href="http://www.ebi.ac.uk/goldman-srv/prank" target="_blank">PRANK</a> aligner.<br><hr>',namespan,opttitle,optdiv,'<br>'],{btn:alignbtn});
+		alignbtn.click(function(){ sendjob({form:optform[0],btn:alignbtn,statusdiv:{div:optdiv,title:opttitle},name:nameinput.val()}); });
+		var dialogdiv = makewindow("Make alignment",['Current sequence data will be aligned with <a href="http://www.ebi.ac.uk/goldman-srv/prank" target="_blank">Prank</a> aligner.<br><hr>',namespan,opttitle,optdiv,'<br>'],{btn:alignbtn});
 		ko.applyBindings(model,dialogdiv[0]);
 	}
 	else if(type=='jobstatus'){
-		if($("#jobstatus").length>0){ $("#jobstatus").trigger('mousedown');  return; }
-		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. You can realign the sequence or revert the tree modifications.<br><a class="button square red" onclick="replacetree()">Revert</a><a class="button square">Realign</a>';
-		var notediv = '<div class="sectiontitle" data-bind="visible:treealtered"><img src="img/info.png"><span>Notifications</span></div><div data-bind="visible:treealtered" class="sectiontxt">'+treenote+'</div>';
+		communicate('alignstatus','','jobdata'); //refresh data
+		if($("#jobstatus").length>0){ $("#jobstatus").trigger('mousedown');  return; } //bring window to front
+		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. You can realign the sequence or revert the tree modifications.<br><a class="button square red" onclick="model.selectundo(\'firsttree\'); model.undo();">Revert</a>';
+		var notediv = $('<div class="sectiontitle" data-bind="visible:treealtered"><img src="img/info.png"><span>Notifications</span></div><div data-bind="visible:treealtered" class="sectiontxt">'+treenote+'</div>');
+		var realignbtn = $('<a class="button square">Realign</a>');
+		var optform = model.currentid()? $('<form id="realignoptform" onsubmit="return false">The realignment will <select name="writemode">'+
+		(model.parentid()?'<option value="sibling" checked="checked">branch parent</option>':'')+
+		'<option value="child" '+(model.parentid()?'':'checked="checked"')+'>branch current</option>'+
+		'<option value="overwrite">overwrite current</option></select> analysis files in the <a onclick="dialog(\'library\')">library</a>.</form>') : [''];
+		notediv.last().append(realignbtn,optform);
+		realignbtn.click(function(){ sendjob({form:optform[0],btn:realignbtn,name:'Realignment',realign:true}) });
 		var jobslistdiv = '<div class="sectiontitle" data-bind="visible:sortedjobs().length>0"><img src="img/run.png"><span>Status of background alignment jobs</span></div><div class="insidediv" data-bind="visible:sortedjobs().length>0,foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>';
-		var contentdiv = $(notediv+jobslistdiv);
-		//var header = ['<div class="sectiontitle"><img src="run.png"><span>Status of background alignment jobs</span></div>','<span class="actiontxt note" style="position:absolute;top:0;right:20px;font-size:24px" onclick="communicate(\'alignstatus\',\'\',\'jobdata\')" title="Force-update the status">&#x267A;</span>'];
-		var statuswindowdiv = makewindow("Status overview",[contentdiv],{id:"jobstatus"});
+		var statuswindowdiv = makewindow("Status overview",[notediv,jobslistdiv],{id:"jobstatus",icn:'gear.png'});
 		ko.applyBindings(model,statuswindowdiv[0]);
 	}
-	else if(type=='history'){
+	else if(type=='library'){
 		communicate('getmeta','','analysdata');
-		if($("#history").length>0){ $("#history").trigger('mousedown');  return; }
+		if($("#library").length>0){ $("#library").trigger('mousedown');  return; }
 		var contentdiv = $('<div class="insidediv" data-bind="foreach:{data:sortedanalys,afterAdd:additem,beforeRemove:removeitem}"><div class="itemdiv" data-bind="html:html,style:{height:divh},css:{activeitem:isactive}"></div><div class="insidediv logdiv"></div><hr></div>');
-		var header = ['<b>Previous analyses</b>','<span style="position:absolute;top:5px;right:30px;">Sort by: <select data-bind="options:sortanalysopt,optionsText:\'t\',optionsValue:\'v\',value:sortanalysby"></select></span>'];
-		var historywindowdiv = makewindow("History of analyses",[contentdiv],{id:"history",header:header,icn:'history.png'});
-		ko.applyBindings(model,historywindowdiv[0]);
+		var header = ['<span class="dirtrail" data-bind="html:libdir"></span>','<span style="position:absolute;top:6px;right:15px;"><span class="fade" style="left:-35px"></span>Sort by: <select data-bind="options:sortanalysopt,optionsText:\'t\',optionsValue:\'v\',value:sortanalysby"></select></span>'];
+		var librarywindowdiv = makewindow("Library of analyses",[contentdiv],{id:"library",header:header,icn:'library.png'});
+		ko.applyBindings(model,librarywindowdiv[0]);
 	}
 	else if(type=='removeitem'||type=='terminate'){
 		var btn = options.btn;
 		var jobbtn = btn.title.indexOf('job')==-1 ? false : true;
 		var afterfunc = jobbtn ? function(){ communicate('alignstatus','','jobdata'); } : function(){ communicate('getmeta','','analysdata'); };
 		var action = type=='terminate' ? 'terminate' : 'rmdir';
-		var startlabel = type=='terminate'? 'Kill' : 'Delete';
+		var startlabel = type=='terminate'? 'Stop' : 'Delete';
 		if(btn.innerHTML==startlabel && !jobbtn){
 			btn.innerHTML = 'Confirm';
 			setTimeout(function(){ btn.innerHTML=startlabel; },5000);
 		}else{
 			communicate(action,{id:options.id},{btn:btn,func:afterfunc});
+			if(action=='rmdir' && options.id==model.currentid()) model.currentid('');
 		}
 	}
 }
 
-function sortdata(data,key){ //get sorted items from serverdata
+//submit an alignment job
+function sendjob(options){
+	var alignbtn = options.btn, optdiv=false, opttitle='';
+	if(options.statusdiv){ optdiv = options.statusdiv.div; opttitle = options.statusdiv.title; }
+	var formdata = options.form? new FormData(options.form) : new FormData();
+	formdata.append('name',options.name||'alignment');
+	formdata.append('action','startalign');
+	formdata.append('fasta',parseexport('fasta'));
+	if(options.realign) formdata.append('realign','true');
+	if(model.currentid()) formdata.append('id',model.currentid());
+	if(model.parentid()) formdata.append('parentid',model.parentid());
+	if(options.realign || (!$.isEmptyObject(treesvg) && !options.form['newtree']['checked'])) formdata.append('newick',parseexport('newick',{tags:true}));
+	$.ajax({
+    	url: 'backend.php',
+    	type: 'POST',
+        beforeSend: function(){
+        	alignbtn.html('Sending job');
+        	alignbtn.css({'opacity':0.6,'cursor':'default'});
+        	alignbtn.unbind('click');
+        },
+        success: function(data){  //job sent to server. Show status.
+          	if(optdiv){
+        		optdiv.slideUp();
+        		var job = JSON.parse(data);
+        		optdiv.empty().append('<b>Alignment job started</b><br>');
+        		optdiv.append('<div>Job ID: '+job.id+'<br>Started: '+msectodate(job.starttime)+'</div>');
+        		optdiv.next().after('<span class="note">Job status can be followed via toolbar.</span>');
+        		optdiv.slideDown();
+        		setTimeout(function(){
+        			opttitle.html('<img class="icn" src="img/info.png"> Status of alignment job');
+        			opttitle.css('cursor','default');
+        			alignbtn.html('OK');
+        			alignbtn.css({'opacity':1,'cursor':'pointer'});
+        			alignbtn.closest("div.popupwindow").find("img.closebtn").click();
+        		},500);
+        	}
+        	setTimeout(function(){ communicate('alignstatus','','jobdata'); if(options.realign) model.treealtered(false); }, 600);
+        },
+        error: function(xhrobj,status,msg){
+        	if(status=='OK' && xhrobj.responseText){ this.success(xhrobj.responseText); return; }
+        	alignbtn.html('Failed <img src="img/help.png" title="'+msg+'" class="icn">');
+        	//console.log('Alignment job error: '+status+'|'+msg); if(xhrobj.responseText){ console.log(xhrobj.responseText); }
+        },
+        data: formdata,
+        dataType: "text",
+        cache: false,
+        contentType: false,
+        processData: false
+    });
+    var oldjobcount = serverdata['jobdata']().length;
+    setTimeout(function(){
+    	if(serverdata['jobdata']().length==oldjobcount){ communicate('alignstatus','','jobdata'); }//no update made, fetch data update
+    	if(optdiv) alignbtn.closest("div.popupwindow").find("img.closebtn").click(); //close alignment setup winow
+    },5000);
+}
+
+//get sorted items from serverdata
+function sortdata(data,key){
 	if(!data) data = 'jobdata';
 	if(!key) key = 'starttime';
 	var itemsarray = typeof(data)=='string'? serverdata[data]() : data;
@@ -1892,9 +1980,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
         			dataType: 'text',
         			xhr: function() {
             			myXhr = $.ajaxSettings.xhr();
-            			if(myXhr.upload){ //for handling the progress of the upload
-                			//myXhr.upload.addEventListener('progress',uploadprogress, false);
-            			}
+            			//if(myXhr.upload) //myXhr.upload.addEventListener('progress',uploadprogress, false); //upload progress
             			return myXhr;
         			},
         			beforeSend: function(){
@@ -1954,7 +2040,7 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
         					communicate('writemeta',{id:jobid,key:'imported'});
         					communicate('alignstatus','','jobdata');
         					communicate('getmeta','','analysdata');
-        					setTimeout(function(){ $("#history .closebtn").click() },2000);
+        					setTimeout(function(){ $("#library .closebtn").click() },2000);
         				}
         			}
     			},
@@ -2006,11 +2092,10 @@ function readfiles(filearr,infodiv,action){ //(array[{name,..}],jQObj,string)||(
 }
 
 function uploadprogress(e){ //file upload meter
-    if(e.lengthComputable){
-        //console.log(parseInt((e.loaded/e.total)*100)+'%');
-    }
+    if(e.lengthComputable) console.log(parseInt((e.loaded/e.total)*100)+'%');
 }
 
+//sequence row highlight
 var hideborder = false;
 function rowborder(data,hiding){
 	if(hideborder) clearTimeout(hideborder);

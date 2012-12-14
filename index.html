@@ -7,8 +7,8 @@
 	<link rel="shortcut icon" href="img/icon.png" />
 	<link rel="apple-touch-icon" href="img/icon_big.png" />
 	<link href="style.css" rel="stylesheet" type="text/css" media="screen" />
-	<script type="text/javascript" src="js/jquery.js"></script>
-	<script type="text/javascript" src="js/jquery.ui.js"></script>
+	<script type="text/javascript" src="js/jquery-1.8.3.js"></script>
+	<script type="text/javascript" src="js/jquery-ui-1.9.2.js"></script>
 	<script type="text/javascript" src="js/jquery.easing.js"></script>
 	<script type="text/javascript" src="js/jquery.mousewheel.js"></script>
 	<script type="text/javascript" src="js/knockout.js"></script>
@@ -58,7 +58,7 @@
 	    <div class="toptext">Actions history</div>
 	    <div id="undowrap" class="buttonmenuwrap">
 	      	<div class="menuborder"></div>
-	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:undostack"><li data-bind="click:$parent.selectundo"><span data-bind="html:'<img src=\'img/'+type+'.png\' class=\'icn\'> '+name+'<span class=\'right\' title=\''+info+'\'>'+svgicon('info')+'</span>'"></span></li></ul></div>
+	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:undostack"><li data-bind="click:$parent.selectundo,style:{backgroundColor:$data==$parent.activeundo()?'#99c5f6':''}"><span data-bind="html:'<img src=\'img/'+type+'.png\' class=\'icn\'> '+name+'<span class=\'right\' title=\''+info+'\'>'+svgicon('info')+'</span>'"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
 	  </div>
@@ -73,7 +73,7 @@
 	      	<div class="toptext">Selection mode</div>
 	      	<div id="selectmodewrap" class="buttonmenuwrap">
 	      		<div class="menuborder"></div>
-	      		<div id="selectmodemenu" class="buttonmenu"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode"><span data-bind="text:mode"></span><span class="right" data-bind="text:icon"></span></li></ul></div>
+	      		<div id="selectmodemenu" class="buttonmenu"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode,style:{backgroundColor:mode==$parent.selmode()?'#99c5f6':''}"><span data-bind="text:mode"></span><span class="right" data-bind="text:icon"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	      	</div>
 	   </div>

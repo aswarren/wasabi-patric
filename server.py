@@ -30,14 +30,15 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
             url = url[1:] #remove leading /
             
             if url.endswith(".html") | url.endswith(".css") | url.endswith(".js"): #send html page
-                type = 'text/css' if url.endswith(".css") else 'text/javascript' if url.endswith(".js") else 'text/html'
+                ctype = 'text/css' if url.endswith(".css") else 'text/javascript' if url.endswith(".js") else 'text/html'
                 f = open(apath(url)) #this potentially makes every file on your computer readable from browser
             else: #default: just send the file
-                type = 'image' if url.endswith(".jpg")|url.endswith(".png")|url.endswith(".gif") else 'application/octet-stream'
+                ctype = 'image' if url.endswith(".jpg")|url.endswith(".png")|url.endswith(".gif") else 'application/octet-stream'
                 f = open(apath(url), 'rb')
+            if(string.find(url,'export/') > -1): ctype = 'application/octet-stream'
             filecontent = f.read()
             self.send_response(200)
-            self.send_header('Content-type', type)
+            self.send_header('Content-type', ctype)
             self.send_header("Content-length", len(filecontent))
             self.end_headers()
             self.wfile.write(filecontent)
@@ -59,14 +60,20 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 urlfile = urllib2.urlopen(form.getvalue('fileurl'))
                 sendOK(self)
                 self.wfile.write(urlfile.read())
-            elif (action == 'startalign') | (action == 'export'):
+            elif (action == 'startalign') or (action == 'export'):
                 alignerpath = apath('aligners/prank/prank') #Use supplied aligner binary, global install as a fallback.
                 try: call = subprocess.call(alignerpath,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
                 except OSError: alignerpath = 'prank'
                 aligner = 'PRANK:'+alignerpath
                 jobid = ''.join(random.choice(string.letters + string.digits) for i in range(10))
+                parentid = form.getvalue('parentid','')
+                currentid = form.getvalue('id','')
+                writemode = form.getvalue('writemode','')
+                if (writemode=='sibling' and parentid): jobid = parentid+'/children/'+jobid
+                elif (writemode=='child' and currentid): jobid = currentid+'/children/'+jobid
+                elif (writemode=='overwrite' and currentid): jobid = currentid 
                 odir = 'analyses/'+jobid+'/'
-                os.mkdir(odir)
+                if not os.path.exists(odir): os.makedirs(odir)
                 params = [alignerpath,'-d='+apath(odir+'input.fas'),'-o='+apath(odir+'out'),'-prunetree']
                 inpath = apath(odir+'input.fas')
                 fafile = open(inpath, 'w')
@@ -81,6 +88,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     if 'F' in form: params.append('+F')
                     if 'e' in form: params.append('-e')
                     if 'dots' in form: params.append('-dots')
+                    if 'realign' in form: params.append('-update')
                     if 'anchor' not in form: params.append('-noanchors')
                     logpath = odir+'out.log'
                     logfile = open(apath(logpath), 'w')
@@ -91,7 +99,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     logline = ' '
                     metapath = apath(odir+'meta.txt')
                     metafile = open(metapath, 'w')
-                    jobs[jobid] = {'popen':popen,'starttime':starttime,'name':name,'logpath':logpath,'metapath':metapath,'order':str(len(jobs))}
+                    jobs[jobid] = {'popen':popen,'starttime':starttime,'name':name,"aligner":aligner,"parameters":",".join(params[1:]),'logpath':logpath,'metapath':metapath,'order':str(len(jobs))}
                     jobdata = {"id":jobid,"name":name,"aligner":aligner,"parameters":",".join(params[1:]),"infile":inpath,"logfile":logpath,"starttime":starttime}
                     json.dump(jobdata,metafile) #write data to file
                     jobdata["status"] = status
@@ -121,10 +129,9 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
             elif action == 'alignstatus': #send status or terminate registered job(s)
                 getid = form.getvalue('id','')
                 sendstr = ''
-                for jobid in jobs:
+                for jobid in jobs.keys():
                     job = jobs[jobid]
                     if getid and jobid is not getid: continue #get a specific job
-                    #if 'imported' in job: continue #skip imported data
                     imported = job.get('imported','')
                     order = job['order']
                     popen = job['popen']
@@ -168,6 +175,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     else: endtime = job['endtime']
                     if 'outfile' in job: outpath = job['outfile']
                     sendstr += '{"id":"'+jobid+'","name":"'+name+'","status":"'+status+'","starttime":"'+starttime+'","endtime":"'+endtime+'","savetime":"'+endtime+'","lasttime":"'+filetime+'","log":"'+lastline+'","outfile":"'+outpath+'","logfile":"'+logpath+'","order":"'+order+'","imported":"'+imported+'"},'
+                    if 'imported' in job: del jobs[jobid] #remove imported job from list
                 if sendstr is not '': sendstr = sendstr[:-1]
                 sendOK(self)
                 self.wfile.write('['+sendstr+']')
@@ -187,15 +195,27 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 self.wfile.write('['+json.dumps(jobdata)+']')
             elif action == 'getmeta': #get data for all imported jobs in output folder
                 sendstr = ''
-                for dirname in os.listdir('analyses'):
-                    metapath = apath('analyses/'+dirname+'/meta.txt')
+                parentid = form.getvalue('parentid','')
+                parentdir = 'analyses/'+parentid+'/children/' if parentid else 'analyses/'
+                for dirname in os.listdir(parentdir):
+                    metapath = apath(parentdir+dirname+'/meta.txt')
                     if not os.path.isfile(metapath): continue
-                    if dirname in jobs and 'imported' not in jobs[dirname]: continue #a running job
+                    jobid = parentid+'/children/'+dirname if parentid else dirname
+                    if jobid in jobs and 'imported' not in jobs[jobid]: continue #a running job
                     sendstr += open(metapath).read()+','
+                    if os.path.exists(parentdir+dirname+'/children/'):
+                        childcount = 0
+                        for subdirname in os.listdir(parentdir+dirname+'/children/'):
+                            if os.path.isfile(parentdir+dirname+'/children/'+subdirname+'/meta.txt'):
+                                childid = parentid+'/children/'+dirname+'/children/'+subdirname
+                                if childid in jobs and 'imported' not in jobs[childid]: continue
+                                else: childcount+=1
+                        sendstr = sendstr[:-2]
+                        sendstr += ',"children":'+str(childcount)+'},'
                 if sendstr is not '': sendstr = sendstr[:-1]
                 sendOK(self)
                 self.wfile.write('['+sendstr+']')
-            elif action == 'getdir': #send directory conent list
+            elif action == 'getdir': #send directory filelist
                 path = form.getvalue('dir','')
                 getsub = form.getvalue('subdir','')
                 if not os.path.isdir(path):
@@ -220,7 +240,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 shutil.rmtree(apath('analyses/'+jobid))
                 if jobid in jobs: del jobs[jobid]
                 sendOK(self)
-                self.wfile.write('Deleted')
+                self.wfile.write('Deleted');
             elif action == 'terminate':
                 jobid = form.getvalue('id','tmp')
                 if jobid in jobs:
@@ -228,15 +248,20 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     if popen.poll() is None: popen.terminate()
                 sendOK(self)
                 self.wfile.write('Terminated')
-            elif action == 'makefile': #write file to disk
-                jobid = form.getvalue('id',False)
-                filename = form.getvalue('filename','export.txt')
+            elif action == 'makefile': #write file to disk and send back
+                filename = form.getvalue('filename','exported_data.txt')
                 filedata = form.getvalue('filedata','')
-                filepath = apath('analyses/'+jobid+'/'+filename) if jobid else apath('exports/'+filename)
+                filepath = apath('exports/'+filename)
                 exportfile = open(filepath,'w')
                 exportfile.write(filedata)
                 sendOK(self)
-                self.wfile.write('{file:"'+filepath+'"}')
+                self.wfile.write('exports/'+filename)
+                for filename in os.listdir('exports'): #remove old files (>2 days)
+                    filestat = os.stat(apath('exports/'+filename))
+                    filetime = filestat.st_mtime
+                    curtime = time.time()
+                    fileage = (curtime-filetime)/86400
+                    if(fileage > 2): os.remove(apath('exports/'+filename))
                 
         except IOError as e:
             if hasattr(e, 'reason'):
