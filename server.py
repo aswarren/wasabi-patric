@@ -57,14 +57,13 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 sendOK(self)
                 self.wfile.write(form.getvalue('upfile'))
             elif action == 'geturl':  #download & send remote files
-                urlfile = urllib2.urlopen(form.getvalue('fileurl'))
-                sendOK(self)
-                self.wfile.write(urlfile.read())
-            elif (action == 'startalign') or (action == 'export'):
-                alignerpath = apath('aligners/prank/prank') #Use supplied aligner binary, global install as a fallback.
-                try: call = subprocess.call(alignerpath,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-                except OSError: alignerpath = 'prank'
-                aligner = 'PRANK:'+alignerpath
+            	sendOK(self)
+                try:
+                    urlfile = urllib2.urlopen(form.getvalue('fileurl'))
+                    self.wfile.write(urlfile.read())
+                except urllib2.HTTPError as e:
+                    self.wfile.write(e.read())
+            elif (action == 'startalign') or (action == 'save'): #start new alignment job
                 jobid = ''.join(random.choice(string.letters + string.digits) for i in range(10))
                 parentid = form.getvalue('parentid','')
                 currentid = form.getvalue('id','')
@@ -74,16 +73,22 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 elif (writemode=='overwrite' and currentid): jobid = currentid 
                 odir = 'analyses/'+jobid+'/'
                 if not os.path.exists(odir): os.makedirs(odir)
-                params = [alignerpath,'-d='+apath(odir+'input.fas'),'-o='+apath(odir+'out'),'-prunetree']
-                inpath = apath(odir+'input.fas')
-                fafile = open(inpath, 'w')
-                fafile.write(form.getvalue('fasta',''))
-                if 'newick' in form:
-                    treefile = open(apath(odir+'input.tree'), 'w')
-                    treefile.write(form.getvalue('newick',''))
-                    params.append('-t='+apath(odir+'input.tree'))
+                name = form.getvalue('name','')
+                metapath = apath(odir+'meta.txt')
+                starttime = str(time.time())
                 if action == 'startalign':
-                    name = form.getvalue('name','')
+                    alignerpath = apath('aligners/prank/prank') #use supplied aligner binary, global install as a fallback.
+                    try: call = subprocess.call(alignerpath,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                    except OSError: alignerpath = 'prank'
+                    aligner = 'PRANK:'+alignerpath
+                    params = [alignerpath,'-d='+apath(odir+'input.fas'),'-o='+apath(odir+'out'),'-prunetree']
+                    inpath = apath(odir+'input.fas')
+                    fafile = open(inpath, 'w')
+                    fafile.write(form.getvalue('fasta',''))
+                    if 'newick' in form:
+                        treefile = open(apath(odir+'input.tree'), 'w')
+                        treefile.write(form.getvalue('newick',''))
+                        params.append('-t='+apath(odir+'input.tree'))
                     params.append('-showxml')
                     if 'F' in form: params.append('+F')
                     if 'e' in form: params.append('-e')
@@ -93,39 +98,39 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     logpath = odir+'out.log'
                     logfile = open(apath(logpath), 'w')
                     popen = subprocess.Popen(params, stdout=logfile, stderr=logfile)
-                    starttime = str(time.time())
                     status = popen.poll()
                     status = str(status) if status else 'running' #0=finished;None=running
                     logline = ' '
-                    metapath = apath(odir+'meta.txt')
                     metafile = open(metapath, 'w')
                     jobs[jobid] = {'popen':popen,'starttime':starttime,'name':name,"aligner":aligner,"parameters":",".join(params[1:]),'logpath':logpath,'metapath':metapath,'order':str(len(jobs))}
                     jobdata = {"id":jobid,"name":name,"aligner":aligner,"parameters":",".join(params[1:]),"infile":inpath,"logfile":logpath,"starttime":starttime}
+                    idnames = form.getvalue('idnames','')
+                    if(idnames): jobdata["idnames"] = json.loads(idnames)
                     json.dump(jobdata,metafile) #write data to file
+                    jobdata["idnames"] = ""
                     jobdata["status"] = status
                     jobdata["lasttime"] = starttime
-                    #datastring = json.dumps(jobdata)
                     sendOK(self)
                     json.dump(jobdata,self.wfile)
-                    #self.wfile.write(datastring)
-                elif action == 'export':
-                    params.append('-convert') #convert fasta file with prank
-                    fileformat = form.getvalue('fileformat','')
-                    params.append('-format '+fileformat)
-                    pipe = subprocess.PIPE
-                    popen = subprocess.Popen(params, stdout=pipe, stderr=pipe)
-                    out,err = popen.communicate() #wait for process to end & get output
-                    if err:
-                        self.send_error(501,'Convert failed: %s' % err)
-                        return
-                    filelist = os.listdir(apath(odir))
-                    findex = (i for i in filelist if i.startswith("out"))
-                    outpath = apath(odir+filelist[findex])
-                    if not os.path.isfile(outpath):
-                        self.send_error(404,'Converted file not found: %s' % outpath)
-                        return
-                    sendOK(self)
-                    self.wfile.write(odir+filelist[findex])
+                elif action == 'save': #write files to library dir
+                    savepath = apath(odir+'saved.xml')
+                    savefile = open(savepath, 'w')
+                    savefile.write(form.getvalue('file',''))
+                    if(name): #save files as new library item
+                        metafile = open(metapath, 'w')
+                        source = form.getvalue('source','')
+                        jobdata = {"id":jobid,"name":name,"source":source,"starttime":starttime,"savetime":starttime,"outfile":odir+"saved.xml"}
+                        json.dump(jobdata,metafile)
+                        sendOK(self)
+                        self.wfile.write('Saved')
+                    elif os.path.isfile(metapath): #overwrite existing item
+                        jobdata = json.load(open(metapath))
+                        jobdata["savetime"] = starttime
+                        jobdata["outfile"] = odir+"saved.xml"
+                        json.dump(jobdata,open(metapath,'w'))
+                        sendOK(self)
+                        self.wfile.write('Saved')
+                    else: self.send_error(501,'Failed to save data')
             elif action == 'alignstatus': #send status or terminate registered job(s)
                 getid = form.getvalue('id','')
                 sendstr = ''
@@ -217,21 +222,14 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 self.wfile.write('['+sendstr+']')
             elif action == 'getdir': #send directory filelist
                 path = form.getvalue('dir','')
-                getsub = form.getvalue('subdir','')
                 if not os.path.isdir(path):
                     sendOK(self)
                     return
-                dirlist = os.listdir(path)
                 sendstr = ''
-                for itm in dirlist:
-                    fsize = os.path.getsize(apath(path+'/'+itm))
-                    subpath = apath(path+'/'+itm)
-                    if getsub and os.path.isdir(subpath): #send only 2.level dirlist
-                        sublist = os.listdir(subpath)
-                        for subitm in sublist:
-                            fsize = os.path.getsize(apath(subpath+'/'+subitm))
-                            sendstr += "%s:%d|" % (itm+'/'+subitm,fsize)
-                    else: sendstr += "%s:%d|" % (itm,fsize)
+                for item in os.listdir(path):
+                    itempath = apath(path+'/'+item)
+                    fsize = "folder" if os.path.isdir(itempath) else os.path.getsize(itempath)
+                    sendstr += item+':'+str(fsize)+'|'
                 sendstr = sendstr[:-1] #strip last '|'
                 sendOK(self)
                 self.wfile.write(sendstr)
@@ -241,7 +239,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 if jobid in jobs: del jobs[jobid]
                 sendOK(self)
                 self.wfile.write('Deleted');
-            elif action == 'terminate':
+            elif action == 'terminate': #kill a running job
                 jobid = form.getvalue('id','tmp')
                 if jobid in jobs:
                     popen = jobs[jobid]['popen']
