@@ -1,14 +1,19 @@
-#Andres Veidenberg 2012
+#! /usr/bin/env python
 #coding: utf-8
+#Back-end server to support Wasabi web application
+#Andres Veidenberg 2012 (andres.veidenberg@helsinki.fi)
+
 import os,string,random,cgi,urllib2,subprocess,time,json,socket,shutil
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from SocketServer import ThreadingMixIn
 
 apath = os.path.abspath
 jobs = {}
+urlcache = {}
+
 def sendOK(self):
     self.send_response(200)
-    self.send_header("Content-type", "text/plain")
+    self.send_header("Content-Type", "text/plain")
     self.end_headers()
     
 class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser communication
@@ -29,17 +34,17 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 url += "index.html"
             url = url[1:] #remove leading /
             
-            if url.endswith(".html") | url.endswith(".css") | url.endswith(".js"): #send html page
+            if url.endswith(".html") | url.endswith(".css") | url.endswith(".js"): #send as html page/text
                 ctype = 'text/css' if url.endswith(".css") else 'text/javascript' if url.endswith(".js") else 'text/html'
-                f = open(apath(url)) #this potentially makes every file on your computer readable from browser
-            else: #default: just send the file
+                f = open(apath(url)) #no path limits: any file can be requested by the browser
+            else: #or send as file (default)
                 ctype = 'image' if url.endswith(".jpg")|url.endswith(".png")|url.endswith(".gif") else 'application/octet-stream'
                 f = open(apath(url), 'rb')
-            if(string.find(url,'export/') > -1): ctype = 'application/octet-stream'
+            if(string.find(url,'export/') > -1): ctype = 'application/octet-stream' #force download for file links
             filecontent = f.read()
             self.send_response(200)
-            self.send_header('Content-type', ctype)
-            self.send_header("Content-length", len(filecontent))
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", len(filecontent))
             self.end_headers()
             self.wfile.write(filecontent)
             f.close()
@@ -49,7 +54,6 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
             self.send_error(404,'File Not Found: %s (%d: %s)' % (url,e.errno,e.strerror))
 
     def do_POST(self): #ajax request or file sent to server
-        global rootnode
         try:
             form = cgi.FieldStorage(fp = self.rfile, headers = self.headers, environ={'REQUEST_METHOD':'POST'})
             action = form.getvalue('action')
@@ -57,12 +61,24 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 sendOK(self)
                 self.wfile.write(form.getvalue('upfile'))
             elif action == 'geturl':  #download & send remote files
-            	sendOK(self)
-                try:
-                    urlfile = urllib2.urlopen(form.getvalue('fileurl'))
-                    self.wfile.write(urlfile.read())
-                except urllib2.HTTPError as e:
-                    self.wfile.write(e.read())
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                url = form.getvalue('fileurl')
+                urlfile = '' 
+                if url in urlcache:
+                    urlfile = urlcache[url]
+                    del urlcache[url]
+                else:
+                    try:
+                        urlfile = urllib2.urlopen(url).read()
+                        urlcache[url] = urlfile #cache file for one retry (Firefox bug)
+                    except urllib2.HTTPError as e:
+                        self.end_headers()
+                        self.wfile.write(e.read())
+                if urlfile:
+                    self.send_header("Content-Length", len(urlfile))
+                    self.end_headers()
+                    self.wfile.write(urlfile)
             elif (action == 'startalign') or (action == 'save'): #start new alignment job
                 jobid = ''.join(random.choice(string.letters + string.digits) for i in range(10))
                 parentid = form.getvalue('parentid','')
@@ -74,7 +90,13 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 odir = 'analyses/'+jobid+'/'
                 if not os.path.exists(odir): os.makedirs(odir)
                 name = form.getvalue('name','')
-                metapath = apath(odir+'meta.txt')
+                metapath = apath(odir+'meta.txt') #info for library
+                importmetapath = apath(odir+'importmeta.txt') #info for results import
+                importdata = {"id":jobid}
+                ensinfo = form.getvalue('ensinfo','')
+                if(ensinfo): importdata["ensinfo"] = json.loads(ensinfo)
+                nodeinfo = form.getvalue('nodeinfo','')
+                if(nodeinfo): importdata["nodeinfo"] = json.loads(nodeinfo)
                 starttime = str(time.time())
                 if action == 'startalign':
                     alignerpath = apath('aligners/prank/prank') #use supplied aligner binary, global install as a fallback.
@@ -101,36 +123,38 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     status = popen.poll()
                     status = str(status) if status else 'running' #0=finished;None=running
                     logline = ' '
-                    metafile = open(metapath, 'w')
                     jobs[jobid] = {'popen':popen,'starttime':starttime,'name':name,"aligner":aligner,"parameters":",".join(params[1:]),'logpath':logpath,'metapath':metapath,'order':str(len(jobs))}
                     jobdata = {"id":jobid,"name":name,"aligner":aligner,"parameters":",".join(params[1:]),"infile":inpath,"logfile":logpath,"starttime":starttime}
                     idnames = form.getvalue('idnames','')
-                    if(idnames): jobdata["idnames"] = json.loads(idnames)
+                    if(idnames): importdata["idnames"] = json.loads(idnames)
+                    metafile = open(metapath, 'w')
                     json.dump(jobdata,metafile) #write data to file
-                    jobdata["idnames"] = ""
                     jobdata["status"] = status
                     jobdata["lasttime"] = starttime
                     sendOK(self)
                     json.dump(jobdata,self.wfile)
+                    importmetafile = open(importmetapath, 'w')
+                    json.dump(importdata,importmetafile)
                 elif action == 'save': #write files to library dir
                     savepath = apath(odir+'saved.xml')
                     savefile = open(savepath, 'w')
                     savefile.write(form.getvalue('file',''))
                     if(name): #save files as new library item
-                        metafile = open(metapath, 'w')
                         source = form.getvalue('source','')
-                        jobdata = {"id":jobid,"name":name,"source":source,"starttime":starttime,"savetime":starttime,"outfile":odir+"saved.xml"}
-                        json.dump(jobdata,metafile)
-                        sendOK(self)
-                        self.wfile.write('Saved')
+                        jobdata = {"id":jobid, "name":name, "source":source, "starttime":starttime}
+                        importmetafile = open(importmetapath, 'w')
+                        json.dump(importdata,importmetafile)
                     elif os.path.isfile(metapath): #overwrite existing item
                         jobdata = json.load(open(metapath))
-                        jobdata["savetime"] = starttime
-                        jobdata["outfile"] = odir+"saved.xml"
-                        json.dump(jobdata,open(metapath,'w'))
-                        sendOK(self)
-                        self.wfile.write('Saved')
-                    else: self.send_error(501,'Failed to save data')
+                    else:
+                        self.send_error(501,'Failed to save data')
+                        return
+                    jobdata["savetime"] = starttime
+                    jobdata["outfile"] = odir+"saved.xml"
+                    metafile = open(metapath, 'w')
+                    json.dump(jobdata,metafile)
+                    sendOK(self)
+                    self.wfile.write('{"id":"'+jobid+'"}')
             elif action == 'alignstatus': #send status or terminate registered job(s)
                 getid = form.getvalue('id','')
                 sendstr = ''
@@ -143,6 +167,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     status = popen.poll()
                     status = 'running' if status is None else str(status)
                     name = job['name']
+                    params = job['parameters']
                     starttime = job['starttime']
                     outpath = ''
                     logpath = job['logpath']
@@ -179,7 +204,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                             json.dump(jobdata,open(metapath,'w'))
                     else: endtime = job['endtime']
                     if 'outfile' in job: outpath = job['outfile']
-                    sendstr += '{"id":"'+jobid+'","name":"'+name+'","status":"'+status+'","starttime":"'+starttime+'","endtime":"'+endtime+'","savetime":"'+endtime+'","lasttime":"'+filetime+'","log":"'+lastline+'","outfile":"'+outpath+'","logfile":"'+logpath+'","order":"'+order+'","imported":"'+imported+'"},'
+                    sendstr += '{"id":"'+jobid+'","name":"'+name+'","status":"'+status+'","parameters":"'+params+'","starttime":"'+starttime+'","endtime":"'+endtime+'","savetime":"'+endtime+'","lasttime":"'+filetime+'","log":"'+lastline+'","outfile":"'+outpath+'","logfile":"'+logpath+'","order":"'+order+'","imported":"'+imported+'"},'
                     if 'imported' in job: del jobs[jobid] #remove imported job from list
                 if sendstr is not '': sendstr = sendstr[:-1]
                 sendOK(self)
@@ -206,20 +231,29 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     metapath = apath(parentdir+dirname+'/meta.txt')
                     if not os.path.isfile(metapath): continue
                     jobid = parentid+'/children/'+dirname if parentid else dirname
-                    if jobid in jobs and 'imported' not in jobs[jobid]: continue #a running job
+                    if jobid in jobs and 'outfile' not in jobs[jobid]: continue #a running job
                     sendstr += open(metapath).read()+','
                     if os.path.exists(parentdir+dirname+'/children/'):
                         childcount = 0
                         for subdirname in os.listdir(parentdir+dirname+'/children/'):
                             if os.path.isfile(parentdir+dirname+'/children/'+subdirname+'/meta.txt'):
                                 childid = parentid+'/children/'+dirname+'/children/'+subdirname
-                                if childid in jobs and 'imported' not in jobs[childid]: continue
+                                if childid in jobs and 'outfile' not in jobs[childid]: continue
                                 else: childcount+=1
                         sendstr = sendstr[:-2]
                         sendstr += ',"children":'+str(childcount)+'},'
                 if sendstr is not '': sendstr = sendstr[:-1]
                 sendOK(self)
                 self.wfile.write('['+sendstr+']')
+            elif action == 'getimportmeta': #send extra data for main import file
+                jobid = form.getvalue('id','')
+                if not jobid:
+                    sendOK(self)
+                    return
+                metapath = 'analyses/'+jobid+'/importmeta.txt'
+                sendstr = open(metapath).read() if os.path.isfile(metapath) else '{}'
+                sendOK(self)
+                self.wfile.write(sendstr)
             elif action == 'getdir': #send directory filelist
                 path = form.getvalue('dir','')
                 if not os.path.isdir(path):
@@ -270,6 +304,8 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
             self.send_error(501,'System error: %s' % e.strerror)
             
 class MultiThreadServer(ThreadingMixIn, HTTPServer): #subclass for multithread support
+    allow_reuse_address = True #can restart server even when port left open
+    
     def __init__(self, *args):
         HTTPServer.__init__(self,*args)
         

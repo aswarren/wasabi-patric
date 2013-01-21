@@ -14,9 +14,11 @@ html body div.opaque{
 img{ display: inline-block; }
 
 svg.icon path{
-	fill: white;
+	fill: #666;
 	stroke: none;
 }
+
+div.tooltip svg.icon path{ fill: white; }
 
 span.svgicon{
 	display: inline-block;
@@ -60,7 +62,7 @@ a.button {
     text-shadow: 0 1px 0 rgba(255,255,255,.9);
     border-radius: 18px;
     box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(255,255,255,.6);
-    vertical-align: 16px;
+    /*vertical-align: 16px;*/
     user-select: none;
 	-webkit-user-select: none;
 	-moz-user-select: none;
@@ -73,7 +75,6 @@ a.button.square{
 
 a.button.small{
 	padding: 1px 6px;
-	vertical-align: 0;
 	margin: 0 5px;
 }
 
@@ -151,11 +152,11 @@ a.button.right{
 	margin-left: 0;
 	vertical-align: 12px;
 }
-a.button svg.icon path{
+#top a.button svg.icon path{
 	fill: #bbb;
 	stroke: #444;
 }
-a.button:hover svg.icon path{
+#top a.button:hover svg.icon path{
 	fill: orange;
 	stroke: #444;
 }
@@ -297,10 +298,6 @@ div.buttonmenuwrap div.buttonmenu span.right{
 	padding: 2px;
 	background-color: white;
 	border-radius: 9px;
-}
-div.buttonmenuwrap .buttonmenu svg.icon path{
-	fill: #666;
-	stroke: none;
 } 
 div.buttonmenuwrap .buttonmenu ul{
 	margin: 0;
@@ -383,7 +380,7 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
  	position: absolute;
  	top: 0;
  	left: 0;
- 	right: 50px;
+ 	right: 80px;
  	height: 100%;
   }
   
@@ -421,7 +418,7 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
  	top: 0;
  	margin-top: 3px;
  	right: 0;
- 	width: 50px;
+ 	width: 80px;
  	height: 100%;
  	border-left: 1px solid white;
  	transition: border-color 0.5s;
@@ -535,19 +532,19 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
 
  #namesborderDragline{
  	position: absolute;
- 	left: -150px;
- 	top: 15px;
- 	width: 141px;
+ 	left: 5px;
+ 	top: 110px;
+ 	width: 297px;
  	height: 0;
  	border: 1px solid #ccc;
  	border-bottom-color: #eee;
  	border-radius: 2px;
  	box-shadow: 0 1px 0 #ccc;
  }
- #right.dragmode #namesborderDragline{ display: none }
+ #namesborderDragline.dragmode{ display: none }
  #namesborderDrag{
  	position: absolute;
- 	left: 83px;
+ 	left: 208px;
  	top: -10px;
  	color: #999;
  	height: 20px;
@@ -641,7 +638,7 @@ img#rightshadow{
 	height: 120px;
 }
 #treebin svg.icon path{
-	fill: rgba(255,255,255,0.6);
+	fill: rgba(255,255,255,0.7);
 }
 
 
@@ -1213,7 +1210,6 @@ div.popupwindow div.sectiontitle>span.svg{
 	height: 20px;
 	width: 20px;
 }
-div.popupwindow div.sectiontitle>span.svg path{ fill: #666 }
 div.popupwindow div.sectiontitle>img{
 	display: inline-block;
 	position: absolute;
@@ -1323,7 +1319,7 @@ div.windowcontent a.button.square{
 
 div.windowcontent ul{ margin-left: 20px; }
 
-div.windowcontent div.btndiv{ text-align: center; }
+div.windowcontent div.btndiv{ text-align: center; margin-top: 5px; }
 
 div.windowcontent span.cell{
 	display: inline-block;
@@ -1352,7 +1348,7 @@ div.dragover{
 }
 
 input{
-	width: 20px;
+	width: 60px;
 	font-size: 16px;
 	border: 1px solid #999;
 	margin: 0 5px 5px 0;
@@ -1596,7 +1592,7 @@ span.actiontxt:hover{ color: orange; }
 span.itemexpand{
 	position: absolute;
 	right: 15px;
-	bottom: -3px;
+	bottom: -2px;
 	color: #666;
 }
 
