@@ -27,7 +27,7 @@
 	
 	  <div class="buttonblock" style="left:0">
 	     <div style="display:inline-block;position:relative;margin-left:10px;">
-	  		<a id="file" class="button file" onclick="togglemenu('filemenu')"><img src="img/file.png" class="before smaller"> File</a>
+	  		<a id="file" class="button" onclick="togglemenu('filemenu')"><img src="img/file.png" class="before"> File</a>
 	      	<div id="filewrap" class="buttonmenuwrap" style="top:52px">
 	      		<div class="menuborder"></div>
 	      		<div id="filemenu" class="buttonmenu"><ul data-bind="foreach:filemenu"><li data-bind="click:$parent.fileclick"><span data-bind="html:$data+' <img src=\'img/'+$data+'.png\'>'"></span></li></ul></div>
@@ -37,7 +37,7 @@
 	   </div>
 	   
 	   <div class="buttonblock" style="left:5%;margin-left:55px">
-	  		<a id="run" class="button run" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before">Analyses</a>
+	  		<a id="run" class="button" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before">Analyses</a>
 	      	<div id="runwrap" class="buttonmenuwrap" style="top:52px">
 	      		<div class="menuborder"></div>
 	      		<div id="runmenu" class="buttonmenu"><ul data-bind="foreach:runmenu"><li data-bind="click:$parent.runclick"><span data-bind="text:n"></span></li></ul></div>
@@ -54,11 +54,11 @@
 	  </div>
 	  
 	  <div class="buttonblock" style="left:18%;margin-left:180px">
-	    <a id="undobtn" class="button left" data-bind="html:svgicon('undo'),click:undo"></a><a id="historybtn" class="button middle" onclick="togglemenu('undomenu')"><span data-bind="fadeText:undoname"></span></a><a id="undobtn" class="button right" data-bind="html:svgicon('redo'),click:redo"></a>
+	    <a id="undobtn" class="button left" data-bind="html:svgicon('undo'),click:undo,css:{disabled:!activeundo.data()||activeundo.undone()}"></a><a id="historybtn" class="button middle" onclick="togglemenu('undomenu')" data-bind="foreach:{data:activeundo.name,afterRender:marginadd,beforeRemove:waitremove}"><span data-bind="fadeText:name"></span></a><a id="undobtn" class="button right" data-bind="html:svgicon('redo'),click:redo,css:{disabled:!activeundo.data()||!activeundo.undone()}"></a>
 	    <div class="toptext">Actions history</div>
 	    <div id="undowrap" class="buttonmenuwrap">
 	      	<div class="menuborder"></div>
-	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:undostack"><li data-bind="click:$parent.selectundo,style:{backgroundColor:$data==$parent.activeundo()?'#99c5f6':''}"><span data-bind="html:'<img src=\'img/'+type+'.png\' class=\'icn\'> '+name+'<span class=\'right\' title=\''+info+'\'>'+svgicon('info')+'</span>'"></span></li></ul></div>
+	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:{data:undostack,afterAdd:slideadd,beforeRemove:slideremove}"><li data-bind="click:$parent.selectundo,style:{backgroundColor:$data==$parent.activeundo.data()?'#ffcc66':''}"><span data-bind="html:'<img src=\'img/'+type+'.png\' class=\'icn\'> '+name+'<span class=\'right\' title=\''+info+'\'>'+svgicon('info')+'</span>'"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
 	  </div>
@@ -69,16 +69,16 @@
 	  </div>
 	  
 	  <div class="buttonblock" style="right:10px">
-	  		<a id="selectmode" data-bind="text: selmode, attr: {class:selclass}" onclick="togglemenu('selectmodemenu')"></a>
+	  		<a id="selectmode" class="button" onclick="togglemenu('selectmodemenu')"><span data-bind="text:selmode"></span><span class="after" data-bind="html:svgicon(selmode())"></span></a>
 	      	<div class="toptext">Selection mode</div>
 	      	<div id="selectmodewrap" class="buttonmenuwrap">
 	      		<div class="menuborder"></div>
-	      		<div id="selectmodemenu" class="buttonmenu"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode,style:{backgroundColor:mode==$parent.selmode()?'#99c5f6':''}"><span data-bind="text:mode"></span><span class="right" data-bind="text:icon"></span></li></ul></div>
+	      		<div id="selectmodemenu" class="buttonmenu"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode,style:{backgroundColor:$data==$parent.selmode()?'#ffcc66':''}"><span data-bind="text:$data"></span><span class="right" data-bind="html:svgicon($data)"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	      	</div>
 	   </div>
 	   
-	</div><!--top-->
+	</div><!--top buttons-->
 	<div id="left">
 		<div id="notree">No tree data</div>
 		<div id="treewrap"><div id="tree"></div><div id="names"></div></div>

@@ -1,22 +1,9 @@
-/* function to fix the -10000 pixel limit of jquery.animate */
-$.fx.prototype.cur = function(){
-	if ( this.elem[this.prop] != null && (!this.elem.style || this.elem.style[this.prop] == null) ) {
-		return this.elem[ this.prop ];
-	}
-	var r = parseFloat( jQuery.css( this.elem, this.prop ) );
-	return typeof r == 'undefined' ? 0 : r;
-} 
-
-/* malihu custom scrollbar plugin - http://manos.malihu.gr (rewritten by Andres Veidenberg)
-function parameters:
-1) scroll easing amount (0 for no easing)
-2) scroll easing type
-3) scrollbar height/width adjustment (values: "auto" or "fixed")
-4) mouse-wheel support (values: "yes" or "no")
-5) scrolling via buttons support (values: "yes" or "no")
-6) buttons scrolling speed (values: 1-20, 1 being the slowest)
-*/ 
-function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,scrollBtnsSupport,scrollBtnsSpeed){
+/*
+Scrollbar library to make sequence & tree areas scrollable
+Based on malihu custom scrollbar plugin - http://manos.malihu.gr
+Rebuilt for Wasabi application: Andres Veidenberg, 2012 (andres.veidenberg@helsinki.fi)
+*/
+function mCustomScrollbar(){
 	var $verticalDragger_container = $("#verticalDragger");
 	var $verticalDragger = $("#verticalDragger .dragger");
 	var $scrollUpBtn = $("#verticalDragger .scrollUpBtn");
@@ -25,6 +12,10 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 	var $horizontalDragger = $("#horizontalDragger .dragger");
 	var $scrollLeftBtn = $("#horizontalDragger .scrollLeftBtn");
 	var $scrollRightBtn = $("#horizontalDragger .scrollRightBtn");
+	
+	var animSpeed = 0; //scrolling motion easing amount (0=no easing)
+	var easeType = 'easeOutCirc'; //scroll easing type
+	var mouseWheelSupport = true;
 	
 	//get & store minimum dragger height & width (defined in css)
 	if(!dom.seqwindow.data("minDraggerHeight")){
@@ -45,164 +36,141 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 	CustomScroller();
 	
 	function CustomScroller(reloadType){
-		//horizontal scrolling ------------------------------
-			var visibleWidth = dom.seqwindow.innerWidth();
-			var totalContentWidth = $("#seq").width();
-			if(totalContentWidth>visibleWidth){ //enable scrollbar if content is long
-				$horizontalDragger.css("display","block");
-				if(reloadType!="resize" && totalContentWidth != dom.seqwindow.data("contentWidth")){
-					$horizontalDragger.css("left", 0);
-					dom.wrap.css("left", 0);
-					dom.seqwindow.data("contentWidth", totalContentWidth);
-				}
-				$horizontalDragger_container.css("display","block");
-				$scrollLeftBtn.css("display","block");
-				$scrollRightBtn.css("display","block");
-				var minDraggerWidth = dom.seqwindow.data("minDraggerWidth");
-				var draggerContainerWidth = $horizontalDragger_container.width();
-		
-				function AdjustDraggerWidth(){
-					if(draggerDimType=="auto"){
-						var adjDraggerWidth = Math.round((visibleWidth/totalContentWidth)*draggerContainerWidth); //adjust dragger width analogous to content
-						if(adjDraggerWidth<=minDraggerWidth){ //minimum dragger width
-							$horizontalDragger.css("width",minDraggerWidth+"px");
-						} else {
-							$horizontalDragger.css("width",adjDraggerWidth+"px");
-						}
-					}
-				}
-				AdjustDraggerWidth();
-				var draggerWidth = $horizontalDragger.width();
-				var draggerXMax = draggerContainerWidth-draggerWidth;
-				$horizontalDragger.draggable({ 
-					axis: "x", 
-					containment: [$horizontalDragger_container.offset().left,0,$horizontalDragger_container.offset().left+draggerXMax], 
-					drag: function(event, ui) {
-						ScrollX(false,'drag');
-					}, 
-					stop: function(event, ui) {
-						horizontalDraggerRelease();
-					}
-				});
-			
-				$horizontalDragger_container.click(function(e) {
-					var mouseCoord=(e.pageX - $(this).offset().left);
-					if(mouseCoord<$horizontalDragger.position().left || mouseCoord>($horizontalDragger.position().left+draggerWidth)){
-						var targetPos=mouseCoord+draggerWidth;
-						if(targetPos<draggerContainerWidth){
-							$horizontalDragger.css("left",mouseCoord);
-							ScrollX(false,'click');
-						} else {
-							$horizontalDragger.css("left",draggerXMax);
-							ScrollX(false,'click');
-						}
-					}
-				});
-				
-				//scroll buttons
-				if(scrollBtnsSupport=="yes"){
-					$scrollLeftBtn.click(function(e){ e.stopPropagation(); ScrollX(0-visibleWidth,'leftbtn'); });
-					$scrollRightBtn.click(function(e){ e.stopPropagation(); ScrollX(visibleWidth,'rightbtn'); });
-				}
-
-				//scroll
-				var scrollXAmount = (totalContentWidth-visibleWidth)/draggerXMax;
-				$horizontalDragger.css("left", (0-dom.wrap.position().left)/scrollXAmount);
-				
-				//drag by ruler
-				var wrapoffset = dom.wrap.offset().left;
-				dom.wrap.draggable({
-					handle: "#ruler",
-					axis: "x",
-					start: function(e, ui) { draginertia.start(0-totalContentWidth+visibleWidth, scrollXAmount, ui.position.left, e.timeStamp) },
-					drag: function(e, ui){
-						draginertia.add(ui.position.left, e.timeStamp);
-						//if(ui.position.left<0 && ui.position.left>0-(totalContentWidth-visibleWidth))
-							$horizontalDragger.css("left",(0-ui.position.left)/scrollXAmount); 
-					},
-       				stop: function(e, ui) { draginertia.end(e.timeStamp); } 
-				});
-			} else { //disable scrollbar if content is short
-				$horizontalDragger.css("left",0).css("display","none"); //reset content scroll
-				dom.wrap.css("left",0);
-				$horizontalDragger_container.css("display","none");
-				$scrollLeftBtn.css("display","none");
-				$scrollRightBtn.css("display","none");
+		///  horizontal scrolling  ///
+		var visibleWidth = dom.seqwindow.innerWidth();
+		var totalContentWidth = $("#seq").width();
+		if(totalContentWidth>visibleWidth){ //enable scrollbar if content is long
+			$horizontalDragger.css("display","block");
+			if(reloadType!="resize" && totalContentWidth!=dom.seqwindow.data("contentWidth")){
+				$horizontalDragger.css("left", 0);
+				dom.wrap.css("left", 0);
+				dom.seqwindow.data("contentWidth", totalContentWidth);
 			}
+			$horizontalDragger_container.css("display","block");
+			$scrollLeftBtn.css("display","block");
+			$scrollRightBtn.css("display","block");
+			var minDraggerWidth = dom.seqwindow.data("minDraggerWidth");
+			var draggerContainerWidth = $horizontalDragger_container.width();
+
+			//adjust dragger width by content
+			var adjDraggerWidth = Math.round((visibleWidth/totalContentWidth)*draggerContainerWidth);
+			//minimum dragger width
+			if(adjDraggerWidth<=minDraggerWidth) $horizontalDragger.css("width",minDraggerWidth+"px");
+			else $horizontalDragger.css("width",adjDraggerWidth+"px");
+			var draggerWidth = $horizontalDragger.width();
+			var draggerXMax = draggerContainerWidth-draggerWidth;
 			
-		//vertical scrolling ------------------------------
-			var visibleHeight = dom.seqwindow.innerHeight()-$("#ruler").outerHeight()-parseInt($("#seqwrap").css('margin-top'));
-			var totalContentHeight = $("#seq").height()+10;
-			if(totalContentHeight>visibleHeight){ //enable scrollbar if content is long
-				$verticalDragger.css("display","block");
-				if(reloadType!="resize" && totalContentHeight != dom.seqwindow.data("contentHeight")){
-					$verticalDragger.css("top",0);
-					dom.seq.css("margin-top",0);
-					dom.seqwindow.data("contentHeight",totalContentHeight);
-				}
-				$verticalDragger_container.css("display","block");
-				$scrollDownBtn.css("display","block");
-				$scrollUpBtn.css("display","block");
-				var minDraggerHeight = dom.seqwindow.data("minDraggerHeight");
-				var draggerContainerHeight = $verticalDragger_container.height();
-		
-				function AdjustDraggerHeight(){
-					if(draggerDimType=="auto"){
-						var adjDraggerHeight = Math.round((visibleHeight/totalContentHeight)*draggerContainerHeight); //adjust dragger height analogous to content
-						if(adjDraggerHeight<=minDraggerHeight){ //minimum dragger height
-							$verticalDragger.css("height",minDraggerHeight+"px").css("line-height",minDraggerHeight+"px");
-						} else {
-							$verticalDragger.css("height",adjDraggerHeight+"px").css("line-height",adjDraggerHeight+"px");
-						}
+			$horizontalDragger.draggable({ 
+				axis: "x", 
+				containment: [$horizontalDragger_container.offset().left, 0, $horizontalDragger_container.offset().left+draggerXMax], 
+				drag: function(){ ScrollX(false,'drag') }, 
+				stop: function() { horizontalDraggerRelease(); }
+			});
+			
+			$horizontalDragger_container.off('click').click(function(e){ //scroll line click => scroll to clicked spot
+				var mouseCoord=(e.pageX - $(this).offset().left);
+				if(mouseCoord<$horizontalDragger.position().left || mouseCoord>($horizontalDragger.position().left+draggerWidth)){
+					var targetPos = mouseCoord+draggerWidth;
+					if(targetPos < draggerContainerWidth){
+						$horizontalDragger.css("left",mouseCoord);
+						ScrollX(false,'click');
+					} else {
+						$horizontalDragger.css("left",draggerXMax);
+						ScrollX(false,'click');
 					}
 				}
-				AdjustDraggerHeight();
-				var draggerHeight = $verticalDragger.height();
-				var draggerYMax = draggerContainerHeight - draggerHeight;
+			});
 				
-				$verticalDragger.draggable({ 
-					axis: "y", 
-					containment: [0,$verticalDragger_container.offset().top,0,$verticalDragger_container.offset().top+draggerYMax], 
-					drag: function(event, ui) {
-						ScrollY(false,'drag');
-					}, 
-					stop: function(event, ui) {
-						verticalDraggerRelease();
-					}
-				});
+			//scroll button click => scroll one page
+			$scrollLeftBtn.off('click').click(function(e){ e.stopPropagation(); ScrollX(0-visibleWidth,'leftbtn'); });
+			$scrollRightBtn.off('click').click(function(e){ e.stopPropagation(); ScrollX(visibleWidth,'rightbtn'); });
+			//scroll
+			var scrollXAmount = (totalContentWidth-visibleWidth)/draggerXMax;
+			$horizontalDragger.css("left", (0-dom.wrap.position().left)/scrollXAmount);
 				
-				$verticalDragger_container.click(function(e) {
-					var mouseCoord = (e.pageY - $(this).offset().top);
-					if(mouseCoord < $verticalDragger.position().top || mouseCoord>($verticalDragger.position().top+draggerHeight)){
-						var targetPos = mouseCoord+draggerHeight;
-						if(targetPos < draggerContainerHeight){
-							$verticalDragger.css("top",mouseCoord);
-							ScrollY(false,'click');
-						} else {
-							$verticalDragger.css("top",draggerYMax);
-							ScrollY(false,'click');
-						}
-					}
-				});
-
-				//scroll buttons
-				if(scrollBtnsSupport=="yes"){
-					$scrollDownBtn.click(function(e){ e.stopPropagation(); ScrollY(visibleHeight,'downbtn'); });
-					$scrollUpBtn.click(function(e){ e.stopPropagation(); ScrollY(0-visibleHeight,'upbtn'); });
-				}
-
-				var scrollYAmount = (totalContentHeight-visibleHeight)/draggerYMax;
-				$verticalDragger.css("top", (0-parseInt(dom.seq.css('margin-top')))/scrollYAmount);
-			} else { //disable scrollbar if content is short
-				$verticalDragger.css("top",0).css("display","none"); //reset content scroll
+			//drag by ruler
+			var wrapoffset = dom.wrap.offset().left;
+			dom.wrap.draggable({
+				handle: "#ruler",
+				axis: "x",
+				start: function(e,ui){ draginertia.start(0-totalContentWidth+visibleWidth, scrollXAmount, ui.position.left, e.timeStamp) },
+				drag: function(e,ui){
+					draginertia.add(ui.position.left, e.timeStamp);
+					$horizontalDragger.css("left",(0-ui.position.left)/scrollXAmount); 
+				},
+       			stop: function(e,ui){ draginertia.end(e.timeStamp); } 
+			});
+		} else { //disable scrollbar if content is short
+			$horizontalDragger.css("left",0).css("display","none"); //reset content scroll
+			dom.wrap.css("left",0);
+			$horizontalDragger_container.css("display","none");
+			$scrollLeftBtn.css("display","none");
+			$scrollRightBtn.css("display","none");
+		}
+			
+		///  vertical scrolling  ///
+		var visibleHeight = dom.seqwindow.innerHeight()-$("#ruler").outerHeight()-parseInt($("#seqwrap").css('margin-top'));
+		var totalContentHeight = $("#seq").height()+10;
+		if(totalContentHeight>visibleHeight){ //enable scrollbar if content is long
+			$verticalDragger.css("display","block");
+			if(reloadType!="resize" && totalContentHeight!=dom.seqwindow.data("contentHeight")){
+				$verticalDragger.css("top",0);
 				dom.seq.css("margin-top",0);
-				$("#treewrap").css("top",0);
-				$verticalDragger_container.css("display","none");
-				$scrollDownBtn.css("display","none");
-				$scrollUpBtn.css("display","none");
+				dom.seqwindow.data("contentHeight",totalContentHeight);
 			}
+			$verticalDragger_container.css("display","block");
+			$scrollDownBtn.css("display","block");
+			$scrollUpBtn.css("display","block");
+			var minDraggerHeight = dom.seqwindow.data("minDraggerHeight");
+			var draggerContainerHeight = $verticalDragger_container.height();
+	
+			//adjust dragger height by content
+			var adjDraggerHeight = Math.round((visibleHeight/totalContentHeight)*draggerContainerHeight);
+			//minimum dragger height
+			if(adjDraggerHeight<=minDraggerHeight) $verticalDragger.css("height",minDraggerHeight+"px").css("line-height",minDraggerHeight+"px");
+			else $verticalDragger.css("height",adjDraggerHeight+"px").css("line-height",adjDraggerHeight+"px");
+			var draggerHeight = $verticalDragger.height();
+			var draggerYMax = draggerContainerHeight - draggerHeight;
+
+			$verticalDragger.draggable({ 
+				axis: "y", 
+				containment: [0,$verticalDragger_container.offset().top,0,$verticalDragger_container.offset().top+draggerYMax], 
+				drag: function(){ ScrollY(false,'drag') }, 
+				stop: function() { verticalDraggerRelease() }
+			});
+				
+			$verticalDragger_container.off('click').click(function(e) {
+				var mouseCoord = (e.pageY - $(this).offset().top);
+				if(mouseCoord < $verticalDragger.position().top || mouseCoord>($verticalDragger.position().top+draggerHeight)){
+					var targetPos = mouseCoord+draggerHeight;
+					if(targetPos < draggerContainerHeight){
+						$verticalDragger.css("top",mouseCoord);
+						ScrollY(false,'click');
+					} else {
+						$verticalDragger.css("top",draggerYMax);
+						ScrollY(false,'click');
+					}
+				}
+			});
+
+			//scroll buttons
+			$scrollDownBtn.off('click').click(function(e){ e.stopPropagation(); ScrollY(visibleHeight,'downbtn'); });
+			$scrollUpBtn.off('click').click(function(e){ e.stopPropagation(); ScrollY(0-visibleHeight,'upbtn'); });
+
+			var scrollYAmount = (totalContentHeight-visibleHeight)/draggerYMax;
+			$verticalDragger.css("top", (0-parseInt(dom.seq.css('margin-top')))/scrollYAmount);
+		} else { //disable scrollbar if content is short
+			$verticalDragger.css("top",0).css("display","none"); //reset content scroll
+			dom.seq.css("margin-top",0);
+			$("#treewrap").css("top",0);
+			$verticalDragger_container.css("display","none");
+			$scrollDownBtn.css("display","none");
+			$scrollUpBtn.css("display","none");
+		}
 		
+		/// do scrolling (set CSS values) ///
 		var scrollXTimer;
+		//horizontal scrolling ([specific point to scroll],[scroll source (debug)])
 		function ScrollX(shift,id){
 			var draggerX = $horizontalDragger.position().left;
 			var posX = parseInt(dom.wrap.css('left'));
@@ -212,16 +180,16 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 				if(draggerPos<0){ draggerPos = 0; }else if(draggerPos>draggerXMax){ draggerPos = draggerXMax; }
 				draggerPos = Math.round(draggerPos);
 				$horizontalDragger.css('left',draggerPos);
-			}
-			else{
-				var target = Math.round(-draggerX*scrollXAmount);
-			}
-			if(target>0){ target = 0; }else if(Math.abs(target)>totalContentWidth-visibleWidth){ target = visibleWidth-totalContentWidth; }
+			} else { var target = Math.round(-draggerX*scrollXAmount); }
+			
+			if(target>0){ target = 0; }
+			else if(Math.abs(target)>totalContentWidth-visibleWidth){ target = visibleWidth-totalContentWidth; }
 			clearTimeout(scrollXTimer);
 			scrollXTimer = setTimeout(function(){ makeImage('x:'+target);},100);
 			dom.wrap.stop().animate({left: target}, animSpeed, easeType);
 		}
 		var scrollYTimer;
+		//vertical scrolling 
 		function ScrollY(shift,id){
 			var draggerY = $verticalDragger.position().top;
 			var marginY = parseInt(dom.seq.css('margin-top'));
@@ -242,47 +210,30 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 			if(target>0){ target = 0; } else if(Math.abs(target)>totalContentHeight-visibleHeight){ target = visibleHeight-totalContentHeight; }
 			dom.seq.stop().animate({marginTop: target}, animSpeed, easeType);
 			$("#treewrap").stop().animate({top: target}, animSpeed, easeType);
-			if($("#namelabel").css('display')=='block'){ //move name label extension while scrolling
-				var target2 = $("#namelabel").position().top+target-marginY;
-				$("#namelabel").stop().animate({top: target2}, animSpeed, easeType);
-			}
-			if($("#treemenu").css('display')=='block'){ //move treemenu
-				var target3 = $("#treemenu").position().top+target-marginY;
-				$("#treemenu").stop().animate({top: target3}, animSpeed, easeType);
-			}
-			if($("#namemenu").length!=0 && $("#namemenu").css('display')=='block'){ //move treeleaf menu
-				var target4 = $("#namemenu").position().top+target-marginY;
-				$("#namemenu").stop().animate({top: target4}, animSpeed, easeType);
-			}
+			$.each([$("#namelabel"),$("#treemenu"),$("#namemenu")],function(m,menu){ //move tree tooltips
+				if(menu.length) menu.stop().animate({top:menu.position().top+target-marginY}, animSpeed, easeType);
+			});
 		}
 				
-		//mousewheel
-		if(mouseWheelSupport=="yes"){
-				$("#left, #seqwindow").off("mousewheel");
-				$("#left, #seqwindow").on("mousewheel", function(event, delta, deltaX, deltaY) {
-					event.preventDefault();
-					if(deltaX){
-						var velX = Math.abs(deltaX*10);
-						$horizontalDragger.css("left", $horizontalDragger.position().left+(deltaX*velX));
-						if($horizontalDragger.position().left<0){
-							$horizontalDragger.css("left", 0);
-						}
-						if($horizontalDragger.position().left>draggerXMax){
-							$horizontalDragger.css("left", draggerXMax);
-						}
-						ScrollX(false,'scroll');
-					} else if(deltaY){
-						var velY = Math.abs(deltaY*10);
-						$verticalDragger.css("top", $verticalDragger.position().top-(deltaY*velY));
-						if($verticalDragger.position().top<0){
-							$verticalDragger.css("top", 0);
-						}
-						else if($verticalDragger.position().top>draggerYMax){
-							$verticalDragger.css("top", draggerYMax);
-						}
-						ScrollY(false,'scroll');
-					}
-				});
+		//use mousewheel
+		if(mouseWheelSupport){
+			$("#left, #seqwindow").off("mousewheel");
+			$("#left, #seqwindow").on("mousewheel", function(event, delta, deltaX, deltaY){
+				event.preventDefault();
+				if(deltaX && $horizontalDragger.length){
+					var velX = Math.abs(deltaX*10);
+					$horizontalDragger.css("left", $horizontalDragger.position().left+(deltaX*velX));
+					if($horizontalDragger.position().left < 0) $horizontalDragger.css("left", 0);
+					else if($horizontalDragger.position().left > draggerXMax) $horizontalDragger.css("left", draggerXMax);
+					ScrollX(false,'scroll');
+				} else if(deltaY && $verticalDragger.length){
+					var velY = Math.abs(deltaY*10);
+					$verticalDragger.css("top", $verticalDragger.position().top-(deltaY*velY));
+					if($verticalDragger.position().top < 0) $verticalDragger.css("top", 0);
+					else if($verticalDragger.position().top > draggerYMax) $verticalDragger.css("top", draggerYMax);
+					ScrollY(false,'scroll');
+				}
+			});
 		}
 		
 		$horizontalDragger.mouseup(function(){
@@ -310,7 +261,7 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 			$verticalDragger.removeClass("dragger_pressed");
 		}
 	}
-	
+	//recalculate scrollbars after window resize
 	var resizeTimer
 	$(window).resize(function() {
 		if($horizontalDragger.position().left>$horizontalDragger_container.width()-$horizontalDragger.width()){
@@ -319,13 +270,12 @@ function mCustomScrollbar(animSpeed,easeType,draggerDimType,mouseWheelSupport,sc
 		if($verticalDragger.position().top>$verticalDragger_container.height()-$verticalDragger.height()){
 			$verticalDragger.css("top", $verticalDragger_container.height()-$verticalDragger.height());
 		}
-		CustomScroller("resize");
 		clearTimeout(resizeTimer);
-		resizeTimer = setTimeout('makeImage()',100);
+		resizeTimer = setTimeout(function(){ CustomScroller("resize"); makeImage(); },100);
 	});
-}
+}//mCustomScrollbar()
 
-//adding inertia for ruler drag
+//add inertia for the sequence area ruler drag
 var draginertia = new function(){  
     var amplify = 500;  //adjust momentum
     var stamps = [];

@@ -9,16 +9,12 @@ html body div.opaque{
 	opacity: 1;
 }
 
-/*div { position: absolute; }*/
-
 img{ display: inline-block; }
 
 svg.icon path{
 	fill: #666;
 	stroke: none;
 }
-
-div.tooltip svg.icon path{ fill: white; }
 
 span.svgicon{
 	display: inline-block;
@@ -53,7 +49,7 @@ a.button {
     background: -ms-linear-gradient(#f9f9f9, #d0d0d0);
     background: -o-linear-gradient(#f9f9f9, #d0d0d0);
     border: 1px solid #888;
-    padding: 6px 24px;
+    padding: 6px 20px;
     margin: 8px;
     font-weight: bold;
     font-size: 16px;
@@ -62,11 +58,11 @@ a.button {
     text-shadow: 0 1px 0 rgba(255,255,255,.9);
     border-radius: 18px;
     box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(255,255,255,.6);
-    /*vertical-align: 16px;*/
     user-select: none;
 	-webkit-user-select: none;
 	-moz-user-select: none;
 }
+#top a.button{ padding: 6px 16px; }
 
 a.button.square{
 	border-radius: 3px;
@@ -102,25 +98,34 @@ a.button:active {
     background: -o-linear-gradient(#dadada, #fafafa);
 }
 
-a.button .before{
-	border-right: 2px groove white;
+#top a.button .before{
+    border-right: 2px groove white;
     display: inline-block;
     height: 25px;
-    margin: -6px 3px -16px -18px;
+    margin: -6px 3px -10px -9px;
     padding: 3px 3px 4px 0;
-    vertical-align: 6px;
-}
-@-moz-document url-prefix() { a.button .before{ vertical-align: 5px; }}
-a.button .after{
-	border-left: 2px groove white;
-    display: inline-block;
-    height: 25px;
-    margin: -6px -18px -16px 3px;
-    padding: 3px 1px 4px 0;
-    vertical-align: 6px;
+    width: 25px;
 }
 
-a.button.left{
+#top a.button .after{
+	border-left: 2px groove white;
+    border-radius: 0 18px 18px 0;
+    display: inline-block;
+    height: 24px;
+    line-height: 15px;
+    margin: -6px -8px -6px 6px;
+    padding: 4px 0 5px 4px;
+    width: 24px;
+    vertical-align: -6px;
+}
+#top a.button .after svg.icon path, #top a.button:hover .after svg.icon path{
+	stroke: none;
+	fill: #666;
+}
+/* for firefox */
+/*@-moz-document url-prefix() { a.button .before{ vertical-align: 5px; }}*/
+
+#top a.button.left{
 	width: 26px;
 	height: 26px;
 	border-right: none;
@@ -129,7 +134,7 @@ a.button.left{
 	margin-right: 0;
 	vertical-align: 12px;
 }
-a.button.middle{
+#top a.button.middle{
 	height: 26px;
 	line-height: 26px;
 	width: 70px;
@@ -143,7 +148,7 @@ a.button.middle{
 	vertical-align: top;
 	text-align: center;
 }
-a.button.right{
+#top a.button.right{
 	width: 26px;
 	height: 26px;
 	border-left: 2px groove white;
@@ -152,6 +157,20 @@ a.button.right{
 	margin-left: 0;
 	vertical-align: 12px;
 }
+
+#historybtn span{
+	box-shadow: 0 3px 3px -3px;
+    float: left;
+    margin-top: -35px;
+    margin-left: -4px;
+    padding: 1px 0 2px 2px;
+    width: 76px;
+    -moz-transition: margin-top 0.6s ease-out;
+	-webkit-transition: margin-top 0.6s ease-out;
+	-o-transition: margin-top 0.6s ease-out;
+	transition: margin-top 0.6s ease-out;
+}
+
 #top a.button svg.icon path{
 	fill: #bbb;
 	stroke: #444;
@@ -160,55 +179,28 @@ a.button.right{
 	fill: orange;
 	stroke: #444;
 }
-
-a.button .smaller{
-    height: 20px;
-    padding: 5px 3px 7px 0;
+#top a.button.disabled svg.icon path{
+	fill: none;
+	stroke: #aaa;
 }
 
-a.button span.btnsection{
+#top a.button span.btnsection{
 	border-left: 2px groove white;
 	padding-left: 3px;
 	margin-left: 5px;
 }
 
-  
-
-a.button:before, a.button:after {
-        background: #ccc;
-        background: rgba(100,100,100,.1);
-        font-size: 24px;
-        line-height: 15px;
-        margin: 0 16px 0 -23px;
-        padding: 1px 4px 2px 6px;
-        border-right: 2px groove white;
-        border-radius: 20px 0 0 20px;
-        vertical-align: -3px;
-        pointer-events: none;
+#statusbtn .nr{
+	background: #888;
+    border-radius: 10px;
+    box-shadow: 0 1px 0 white, 0 1px 3px black inset;
+    color: white;
+    font-weight: normal;
+    padding: 1px 6px;
+    text-shadow: none;
 }
-
-/*for firefox*/
-@-moz-document url-prefix() { a.button:before, a.button:after { padding: 0 4px 3px 6px; vertical-align: -1px; } }
-
-a.button:after {
-        margin-left: 16px;
-        margin-right: -23px;
-        padding-left: 4px;
-        padding-right: 6px;
-        border-left: 2px groove white;
-        border-right: none;
-        border-radius: 0 20px 20px 0;
-}
-
-a.square:before, a.square:after {
-	border-radius: 5px;
-}
-
-/*#top a.undo:before { content: "\21BA"; }
-#top a.redo:after { content: "\21BB"; }*/
-#top a.default:after { content: "\25FB"; padding-bottom: 4px }
-#top a.columns:after { content: "\25A5"; vertical-align: -3px; padding: 2px 8px 2px 6px; }
-#top a.rows:after { content: "\25A4"; vertical-align: -3px; padding: 2px 8px 2px 6px; }
+#statusbtn .nr.green{ background: green; }
+#statusbtn .nr.red{ background: red; }
 
 #top div.buttonblock{
 	position:absolute;
@@ -216,7 +208,7 @@ a.square:before, a.square:after {
 }
 
 #zoombtns { vertical-align: bottom; }
-a.zoom {
+#top a.zoom {
 	margin: 8px 2px;
 	font-size: 32px;
     font-weight: normal;
@@ -226,13 +218,7 @@ a.zoom {
     text-align: center;
     vertical-align: bottom;
 }
-#zoomout{ padding-bottom: 11px; padding-top: 7px; }
-/*webkit*/
-@media screen and (-webkit-min-device-pixel-ratio:0){ 
-	#top a.default:after { padding-bottom: 2px }
-	#top a.columns:after { padding-top: 1px; } 
-	#top a.rows:after { padding-top: 1px; }
-}
+#top #zoomout{ padding-bottom: 11px; padding-top: 7px; }
 
 
 #filewrap{
@@ -309,6 +295,10 @@ div.buttonmenuwrap .buttonmenu ul li{
 	padding: 3px 6px;
 	cursor: pointer;
 	border-top: 1px solid #999;
+	-moz-transition: background-color 0.3s;
+	-webkit-transition: background-color 0.3s;
+	-o-transition: background-color 0.3s;
+	transition: background-color 0.3s;
 }
 div.buttonmenuwrap .buttonmenu ul li:hover{
 	background-color: #99c5f6;
@@ -507,18 +497,18 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
 }
 
 #draggedlabel{
-	position: fixed;
+	position: absolute;
 	font-family: Verdana;
 	box-shadow: 2px 2px 4px #444;
-	z-index: 35;
+	z-index: 45;
 }
 
 #draggedtree{
-	position: fixed;
+	position: absolute;
 	opacity: 0.9;
 	box-shadow: 2px 2px 5px #444;
 	border-radius: 3px;
-	z-index: 35;
+	z-index: 45;
 }
 
 
@@ -611,14 +601,14 @@ img#rightshadow{
 
 #treebin{
 	position: absolute;
-	background: rgba(0,0,0,0.7);
+	background: rgba(0,0,0,0.8);
 	top:0;
 	left: 0;
 	width: 100%;
 	height: 100%;
 	z-index: 30;
 	display: none;
-	opacity: 0.3;
+	opacity: 0.6;
 	transition: opacity 0.4s;
 	-moz-transition: opacity 0.4s;
 	-webkit-transition: opacity 0.4s;
@@ -638,7 +628,7 @@ img#rightshadow{
 	height: 120px;
 }
 #treebin svg.icon path{
-	fill: rgba(255,255,255,0.7);
+	fill: white;
 }
 
 
@@ -857,6 +847,14 @@ div.tooltip{
     -o-transition: opacity 0.2s ease-out, -o-transform 0.2s ease-out;
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
 }
+div.tooltip.white{
+	background-color: rgba(250,250,250,0.98);
+	color: black;
+	box-shadow: 0 2px 6px -1px #333;
+}
+
+div.tooltip svg.icon path{ fill: white; }
+div.tooltip.white svg.icon path{ fill: #444; }
 
 div.tooltip.opaque{
 	opacity: 1;
@@ -877,6 +875,11 @@ div.tooltip.opaque{
     -o-transform: rotate(45deg) skewX(-10deg) skewY(-10deg);
 	background-color: rgba(0,0,0,0.87);
 	box-shadow: 0 0 3px #333;
+}
+.tooltip.white .arrow{
+	background-color: rgba(250,250,250,0.98);
+	border: none;
+	box-shadow: -2px 2px 3px -2px #666;
 }
 .tooltip.leftarrow{
 	-webkit-transform: translateX(10px);
@@ -920,13 +923,34 @@ div.tooltip.opaque{
 	border-right: 2px solid #FFF;
 	border-bottom: 2px solid #FFF;
 }
+.tooltip.white.toparrow > .arrow{ box-shadow: -2px -2px 3px -2px #666; border: none; } 
+.tooltip.white.bottomarrow > .arrow{ box-shadow: 2px 2px 3px -2px #666; border: none; }
 
 .tooltip canvas{ vertical-align: -5px; }
 
 .tooltiptitle{
 	position: relative;
-	padding: 1px 3px;
+	padding: 1px 5px;
 }
+#treemenu .tooltiptitle{ padding-right: 2px; }
+#treemenu .tooltiptitle span.svgicon{
+	margin-left:5px;
+	padding-right:0;
+}
+div.tooltiptitle > span.title{
+	display: inline-block;
+	width: 100px;
+	cursor: default;
+	overflow: hidden;
+	margin-right: -4px;
+}
+div.tooltiptitle span.right{
+	display: inline-block;
+	right: 5px;
+    margin-left: 3px;
+    vertical-align: 5px;
+}
+
 .tooltip .right{
 	position:absolute;
 	right:10px;
@@ -937,9 +961,6 @@ div.tooltip.opaque{
 }
 .tooltip li.arr .right{
 	right: 3px;
-}
-div.tooltiptitle span.right{
-	right: 5px;
 }
 
 div.tooltipcontentwrap{
@@ -978,12 +999,18 @@ div.tooltip ul li:last-child{
 	border-bottom-right-radius: 2px;
 }
 div.tooltip ul li:hover{
-	text-shadow: 0 1px 3px #333;                             
+	text-shadow: 0 1px 3px #333;
+	color: white;                         
 	background: -webkit-linear-gradient(#6589ff,#1943f3);
 	background: -moz-linear-gradient(#6589ff,#1943f3);
 	background: -ms-linear-gradient(#6589ff,#1943f3);
 	background: -o-linear-gradient(#6589ff,#1943f3);	
 }
+div.tooltip ul li:hover div{ text-shadow: none; }
+div.tooltip ul li:hover svg.icon path, div.tooltip.white ul li div ul li:hover svg.icon path{ fill : white }
+div.tooltip.white ul li:hover div svg.icon path{ fill : #444 }
+
+div.tooltip ul a { color: orange; }
 
 
 #seq div.selection{
@@ -1578,6 +1605,7 @@ span.note{
 	color: #666;
 	cursor: default;
 }
+div.tooltip span.note{ color: #ccc; }
 
 span.actiontxt{
 	display: inline-block;

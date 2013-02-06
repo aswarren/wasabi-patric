@@ -17,6 +17,9 @@ def sendOK(self):
     self.end_headers()
     
 class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser communication
+    def log_message(self, format, *args):
+        return #supress console connection log
+        
     def do_HEAD(self):
         try:
             self.send_response(200)
@@ -99,10 +102,10 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 if(nodeinfo): importdata["nodeinfo"] = json.loads(nodeinfo)
                 starttime = str(time.time())
                 if action == 'startalign':
-                    alignerpath = apath('aligners/prank/prank') #use supplied aligner binary, global install as a fallback.
-                    try: call = subprocess.call(alignerpath,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-                    except OSError: alignerpath = 'prank'
+                    alignerpath = apath('aligners/prank/prank') #use supplied aligner binary, global install as a fallback
+                    if not os.path.isfile(alignerpath): alignerpath = 'prank'
                     aligner = 'PRANK:'+alignerpath
+                    jobtype = 'Prank alignment';
                     params = [alignerpath,'-d='+apath(odir+'input.fas'),'-o='+apath(odir+'out'),'-prunetree']
                     inpath = apath(odir+'input.fas')
                     fafile = open(inpath, 'w')
@@ -119,11 +122,12 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     if 'anchor' not in form: params.append('-noanchors')
                     logpath = odir+'out.log'
                     logfile = open(apath(logpath), 'w')
-                    popen = subprocess.Popen(params, stdout=logfile, stderr=logfile)
+                    detach_flag = 0x00000008 if os.name is 'nt' else 0 #for windows
+                    popen = subprocess.Popen(params, stdout=logfile, stderr=logfile, creationflags=detach_flag, close_fds=True)
                     status = popen.poll()
                     status = str(status) if status else 'running' #0=finished;None=running
                     logline = ' '
-                    jobs[jobid] = {'popen':popen,'starttime':starttime,'name':name,"aligner":aligner,"parameters":",".join(params[1:]),'logpath':logpath,'metapath':metapath,'order':str(len(jobs))}
+                    jobs[jobid] = {'popen':popen,'starttime':starttime,'name':name,'aligner':aligner,'parameters':','.join(params[1:]),'logpath':logpath,'metapath':metapath,'order':str(len(jobs)),'type':jobtype}
                     jobdata = {"id":jobid,"name":name,"aligner":aligner,"parameters":",".join(params[1:]),"infile":inpath,"logfile":logpath,"starttime":starttime}
                     idnames = form.getvalue('idnames','')
                     if(idnames): importdata["idnames"] = json.loads(idnames)
@@ -131,10 +135,10 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     json.dump(jobdata,metafile) #write data to file
                     jobdata["status"] = status
                     jobdata["lasttime"] = starttime
-                    sendOK(self)
-                    json.dump(jobdata,self.wfile)
                     importmetafile = open(importmetapath, 'w')
                     json.dump(importdata,importmetafile)
+                    sendOK(self)
+                    self.wfile.write('{"id":"'+jobid+'"}');
                 elif action == 'save': #write files to library dir
                     savepath = apath(odir+'saved.xml')
                     savefile = open(savepath, 'w')
@@ -210,8 +214,8 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                 sendOK(self)
                 self.wfile.write('['+sendstr+']')
             elif action == 'writemeta': #add data to job metadata file
-                jobid = form.getvalue('id')
-                key = form.getvalue('key')
+                jobid = form.getvalue('id','')
+                key = form.getvalue('key','imported')
                 value = form.getvalue('value',str(time.time()))
                 metapath = apath('analyses/'+jobid+'/meta.txt')
                 if not jobid or not key or not os.path.isfile(metapath):
@@ -231,7 +235,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     metapath = apath(parentdir+dirname+'/meta.txt')
                     if not os.path.isfile(metapath): continue
                     jobid = parentid+'/children/'+dirname if parentid else dirname
-                    if jobid in jobs and 'outfile' not in jobs[jobid]: continue #a running job
+                    #if jobid in jobs and 'outfile' not in jobs[jobid]: continue #a running job
                     sendstr += open(metapath).read()+','
                     if os.path.exists(parentdir+dirname+'/children/'):
                         childcount = 0
@@ -304,7 +308,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
             self.send_error(501,'System error: %s' % e.strerror)
             
 class MultiThreadServer(ThreadingMixIn, HTTPServer): #subclass for multithread support
-    allow_reuse_address = True #can restart server even when port left open
+    allow_reuse_address = True #server can be restarted even when port left open
     
     def __init__(self, *args):
         HTTPServer.__init__(self,*args)

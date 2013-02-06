@@ -50,12 +50,20 @@ var dom = {};
 function parentid(id){ //extract parent dir from a library dir
 	if(!id) return '';
 	var idend = id.lastIndexOf('/children/');
-	return idend!=-1? id.substring(0,idend) : '';
+	return ~idend? id.substring(0,idend) : '';
+}
+
+ko.observableArray.fn.sortByProperty = function(prop) {
+    this.sort(function(obj1, obj2){
+        if (obj1[prop] == obj2[prop]) return 0;
+        else if (obj1[prop] < obj2[prop]) return -1 ;
+        else return 1;
+    });
 }
 
 /* KnockOut data models to keep the state of the system */
 
-//datamodel for file exporting (export window)
+//file export settings (export window)
 var myExport = function(){
 	var self = this;
 	self.categories = [
@@ -90,6 +98,7 @@ var myExport = function(){
 }
 var exportmodel = new myExport();
 
+//ensembl import settings
 var myEnsembl = function(){
 	var self = this;
 	self.idformats = [{name:'Gene',url:'homology',example:'ENSG00000198125'},{name:'GeneTree',url:'genetree',example:'ENSGT00390000003602'}];
@@ -104,10 +113,18 @@ var myEnsembl = function(){
 }
 var ensemblmodel = new myEnsembl();
 
-var myModel = function(){ //main datamodel
+//global settings
+var mySettings = function(){
+	var self = this;
+	self.tooltipclass = ko.observable('white');
+}
+var settings = new mySettings();
+
+//main datamodel
+var myModel = function(){
 	var self = this;
 	//rendering parameters
-	self.startfile = "mindata.xml";
+	self.startfile = "testdata.xml";
 	self.zoomlevel = ko.observable(10);
 	self.zoomperc = ko.computed(function(){ var l = self.zoomlevel(); return l==2 ? 'MIN' : l==20 ? 'MAX' : l*5+'%'; });
 	self.boxw = ko.computed(function(){ return parseInt(self.zoomlevel()*1.5); });
@@ -117,13 +134,12 @@ var myModel = function(){ //main datamodel
 	self.namesw = ko.computed(function(){ return self.nameswidth()+'px'; });
 	self.dendogram = ko.observable(false);
 	//button states
-	self.selmode = ko.observable('default');
-	self.selmodes = [{mode:'default',icon:'\u25FB'},{mode:'columns',icon:'\u25A5'},{mode:'rows',icon:'\u25A4'}];
-	self.selclass = ko.computed(function(){ return 'button '+self.selmode(); });
-	self.setmode = function(data){ self.selmode(data.mode); togglemenu('selectmodemenu','hide'); toggleselection(data.mode); };
+	self.selmodes = ['default','columns','rows'];
+	self.selmode = ko.observable(self.selmodes[0]);
+	self.setmode = function(mode){ self.selmode(mode); togglemenu('selectmodemenu','hide'); toggleselection(mode); };
 	self.filemenu = ['library','import','export','save','info'];
 	self.fileclick = function(data){ dialog(data); togglemenu('filemenu','hide'); };
-	self.runmenu = [{n:'Make alignment',c:'align'},{n:'Make guidetree',c:'tree'},{n:'Compact columns',c:'compact'},{n:'Test alginment',c:'test'}];
+	self.runmenu = [{n:'Make alignment',c:'align'}];
 	self.runclick = function(data){ dialog(data.c); togglemenu('runmenu','hide'); };
 	//current data
 	self.currentid = ko.observable('');
@@ -176,10 +192,10 @@ var myModel = function(){ //main datamodel
 	//alignment jobs tracking (status window)
 	self.sortjobsby = ko.observable('starttime');
 	self.sortedjobs = ko.computed(function(){ return sortdata('jobdata',self.sortjobsby()); }).extend({throttle:100});
-	self.jobtimeout = '';
+	self.jobtimer = '';
 	//notifications
 	self.treealtered = ko.observable(false);
-	self.statusbtn = ko.computed(function(){
+	self.statusbtn = ko.computed(function(){ //notification button
 		var str = '';
 		if(self.treealtered()){
 			str = '<span style="color:red">Realign needed</span>';
@@ -191,22 +207,21 @@ var myModel = function(){ //main datamodel
 			else if(!job.imported()) ready++;
 		});
 		var total = running+ready;
-		var counticons = ['&#x24FF;','&#x2776;','&#x2777;','&#x2778;','&#x2779;','&#x277A;','&#x277B;','&#x277C;','&#x277D;','&#x277E;','&#x277F;','&#x24EB;','&#x24EC;','&#x24ED;','&#x24EE;','&#x24EF;','&#x24F0;','&#x24F1;','&#x24F2;','&#x24F3;','&#x24F4;'];
 		if(total>0){
 			if(str != ''){
-				str += '<span class="btnsection">'+(counticons[total]||total)+'<span>';
+				str += '<span class="btnsection"><span class="nr">'+total+'</span></span>';
 			}
 			else{
 				str = 'Jobs ';
-				if(running > 0) str += 'running '+(counticons[running]||running);
-				if(ready > 0) str += 'ready '+(counticons[ready]||ready);
+				if(running > 0) str += 'running <span class="nr red">'+running+'</span>';
+				if(ready > 0) str += 'ready <span class="nr green">'+ready+'</span>';
 			}
 			if(running > 0){
-				if(self.jobtimeout) clearTimeout(self.jobtimeout);
-				self.jobtimeout = setTimeout(function(){ communicate('alignstatus','','jobdata'); },1000); //update data in 1s
+				if(self.jobtimer) clearTimeout(self.jobtimer);
+				self.jobtimer = setTimeout(function(){ communicate('alignstatus','','jobdata'); },2000); //update data every 2s
 			}
 		}
-		if(self.sortedjobs().length==0&&!self.treealtered()&&$("#jobstatus").length!=0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },1000); } //close empty status window
+		if(self.sortedjobs().length==0&&!self.treealtered()&&$("#jobstatus").length!=0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },500); } //close empty status window
 		return str;
 	}).extend({throttle: 200});
 	//imported alignments list (library window)
@@ -216,47 +231,50 @@ var myModel = function(){ //main datamodel
 	self.additem = function(div){ if($(div).hasClass('itemdiv')) $(div).hide().fadeIn(800); };
 	self.removeitem = function(div){ $(div).remove(); };
 	//undo stack
+	self.activeundo = {name:ko.observableArray([{name:ko.observable('History')}]), undone:ko.observable(''), data:ko.observable('')};
+	self.refreshundo = function(data,redo){
+		if(!self.undostack().length){
+			self.activeundo.name()[0].name('History'); self.activeundo.data('');
+		} else {
+			if(!data) data = self.undostack()[0];
+			var name = data.name.length>8? data.name.split(' ')[0] : data.name;
+			if(redo) self.activeundo.name()[0].name(name);
+			else { self.activeundo.name.removeAll(); self.activeundo.name.push({name:ko.observable(name)}); }
+			self.activeundo.undone(false);
+			self.activeundo.data(data);
+		}
+	};
 	self.undostack = ko.observableArray();
-	self.activeundo = ko.observable(''); //{name:'',type:'',data:{},undone:false}
-	self.undoname = ko.computed(function(){
-		if(!self.activeundo() && self.undostack().length>0) self.activeundo(self.undostack()[0]);
-		var name = self.activeundo()?self.activeundo().name:'History';
-		if(name.length>7) name = name.substr(0,6)+'..';
-		return name;
-	});
 	self.treesnapshot = '';
 	self.selectundo = function(data){
 		if(data==='firsttree') data = self.gettreeundo('first');
-		self.activeundo(data);
+		self.refreshundo(data,'select');
 		togglemenu('undomenu','hide');
 	};
-	self.addundo = function(undodata){
-		undodata.undone = false;
+	self.addundo = function(undodata,redo){
 		if(undodata.type=='tree'&&undodata.info.indexOf('subsequent')==-1) undodata.info += ' Undo will also revert any subsequent tree modifications.';
 		self.undostack.unshift(undodata);
-		self.activeundo(undodata);
+		self.refreshundo(undodata,redo);
 	};
 	self.undo = function(){
-		var data = self.activeundo();
-		if(data.undone) return;
+		var undone = self.activeundo.undone;
+		var data = self.activeundo.data();
+		if(!data||undone()) return;
 		if(data.type=='tree'){
 			var undoindex = self.undostack.indexOf(data);
 			var restore = data===self.gettreeundo('first')? self.treesnapshot : (self.gettreeundo('prev',undoindex).data || self.treesnapshot);
 			treesvg.loaddata(restore);
 			self.gettreeundo('remove',undoindex);
-			if(restore == self.treesnapshot) self.treealtered(false);
 		}
 		self.undostack.remove(data);
-		data.undone = true;
+		undone(true);
 	};
 	self.redo = function(){
-		var data = self.activeundo();
-		if(!data.undone) return;
-		if(data.type=='tree'){
-			treesvg.loaddata(data.data);
-			if(data.data != self.treesnapshot) self.treealtered(true);
-		}
-		self.addundo(data);
+		var undone = self.activeundo.undone;
+		var data = self.activeundo.data();
+		if(!data||!undone()) return;
+		if(data.type=='tree') treesvg.loaddata(data.data);
+		self.addundo(data,'redo');
 	};
 	self.gettreeundo = function(mode,index){
 		var start = mode=='prev'? index+1 : 0;
@@ -297,13 +315,17 @@ ko.bindingHandlers.fadeText = {
         $(element).fadeIn(200);
     }        
 };
+var slideadd = function(el){ $(el).css('display','none'); $(el).slideDown() };
+var slideremove = function(el){ $(el).slideUp(400,function(){ $(this).remove() }) };
+var marginadd = function(elarr,data){ if(data.name()=='History') elarr[0].style.marginTop=0; else setTimeout(function(){ elarr[0].style.marginTop=0 },50); };
+var waitremove = function(el){ setTimeout(function(){ $(el).remove() },500) };
 
 //HTML rendering for running jobs (jobstatus window)
 var jobmodel = function(data){
 	ko.mapping.fromJS(data, {}, this);
 	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+(sclass||'')+'" style="'+(style||'')+'" title="'+(title||'')+'" onclick="'+action+';return false;">'+name+'</a>'; };
 	
-	this.html = ko.computed(function() {
+	this.html = ko.computed(function(){
 		var idindex = this.id().lastIndexOf('/');
 		var shortid = idindex!=-1? this.id().substring(idindex+1) : this.id(); 
     	if(this.imported()){ return 'Files from job '+shortid+'<br>have been imported. '+btnhtml('dialog(\'library\')','Library','top:3px'); }
@@ -317,17 +339,16 @@ var jobmodel = function(data){
 				var err = ((status!='0')?'Exit code '+status+'. ':'')+((!this.outfile())?'No result file. ':'')+' Check log for details.';
 				status = '<span style="color:red">Failed. </span><img class="icn" src="img/help.png" title="'+err+'"> ';
 				btn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','color:red','Delete data of job '+shortid,'removebtn');
-				if(this.parameters().indexOf('-updated')!=-1) model.treealtered(true); //realignment failed: revert tree status
+				if(~this.parameters().indexOf('-updated')) model.treealtered(true); //realignment failed: revert tree status
 			}
 		}
 		else{ btn = btnhtml('dialog(\'terminate\',{id:\''+this.id()+'\',btn:this})','Kill','color:red','Terminate job '+shortid,'removebtn'); }
 		var now = new Date().getTime();
-		var endtime = status=='running' ? now/1000 : parseInt(this.lasttime());
-		var runningtime = numbertosize(endtime-parseInt(this.starttime()),'sec');
+		var jobtype = this.type? this.type() : 'Prank alignment';
 		var lastdate = msectodate(this.lasttime());
 		var logline = this.log()? this.log() : 'Process finished '+lastdate;
-		return  '<span class="note">Name:</span> <span class="logline">'+this.name()+'<span class="fade"></span></span><br><span class="note">Status:</span> '+status+'<br><span class="note">Running time:</span> '+runningtime+btn+'<br><span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Job ID:</span> <span title="Folder path: '+this.id()+'">'+shortid+'</span><br><span class="note">Feedback:</span> <span class="logline actiontxt" onclick="showfile(this,\''+this.logfile()+'\')" title="Last update '+lastdate+'. Click for full log.">'+logline+'<span class="fade"></span></span>';
-    }, this);
+		return  '<span class="note">Name:</span> <span class="logline">'+this.name()+'<span class="fade"></span></span><br><span class="note">Status:</span> '+status+'<br><span class="note">Job type:</span> '+jobtype+btn+'<br><span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Job ID:</span> <span title="Folder path: '+this.id()+'">'+shortid+'</span><br><span class="note">Feedback:</span> <span class="logline actiontxt" onclick="showfile(this,\''+this.logfile()+'\')" title="Last update '+lastdate+'. Click for full log.">'+logline+'<span class="fade"></span></span>';
+    }, this).extend({throttle: 100});
 }
 
 //HTML rendering for imported jobs (library window)
@@ -335,12 +356,11 @@ var analysmodel = function(data){
 	ko.mapping.fromJS(data, {}, this);
 	var btnhtml = function(action,name,style,title,sclass){ return '<a class="button itembtn '+(sclass||'')+'" style="'+(style||'')+'" title="'+(title||'')+'" onclick="'+action+';return false;">'+name+'</a>'; };
 	this.divh = '55px';
-	
+	this.isactive = false;
     this.html = ko.computed(function(){
-    	var imported = this.hasOwnProperty('imported')? msectodate(this.imported()) : 'Never';
-    	var saved = this.hasOwnProperty('savetime')? msectodate(this.savetime()) : 'Never';
-    	this.isactive = false;
-    	if(this.hasOwnProperty('outfile') && this.outfile()){
+    	var imported = this.imported? msectodate(this.imported()) : 'Never';
+    	var saved = this.savetime? msectodate(this.savetime()) : 'Never';
+    	if(this.outfile && this.outfile()){
     		if (typeof(model)!='undefined' && this.id() == model.currentid()){ 
     			var btnname = 'Restore';
     			var btntitle = 'Revert back to saved state';
@@ -348,6 +368,7 @@ var analysmodel = function(data){
     		}else{
     			var btnname = 'Open';
     			var btntitle = 'Open '+this.outfile();
+    			this.isactive = false;
     		}
     		var itembtn = btnhtml('getfile(\''+this.outfile()+'\',this,\''+this.id()+'\')',btnname,'',btntitle);
     		var removebtn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','','Delete folder '+this.id(),'removebtn');
@@ -368,14 +389,14 @@ var analysmodel = function(data){
     	}
     	
     	if(this.hasOwnProperty('children')&&this.children()>0){
-    		var actclass = model.currentid()!=this.id()&&model.currentid().indexOf(this.id())!=-1? ' activeitem' : ''; //child open > color btn white
+    		var actclass = model.currentid()!=this.id()&&~model.currentid().indexOf(this.id())? ' activeitem' : ''; //child open > color btn white
     		var childbtn = btnhtml('communicate(\'getmeta\',{parentid:\''+this.id()+'\'},\'analysdata\')','<span class="svg">'+svgicon('children')+'</span> '+this.children(),'','View subanalyses','childbtn'+actclass);
     	} else var childbtn = '';
     	
     	var idend = this.id().lastIndexOf('/');
 		var folderid = idend!=-1? this.id().substring(idend+1) : this.id();
 		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+imported+'<br><span class="note">File directory:</span> <span class="actiontxt" title="Toggle folder content" onclick="showfile(this,\''+this.id()+'\')">'+folderid+'</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+saved+'<br>'+source+childbtn+removebtn+'<span class="actiontxt itemexpand" onmousedown="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC; More info</span></div>';
-    }, this);
+    }, this).extend({throttle: 100});
 }
 
 function toggleitem(btn,starth){ //expand/contract job divs (library window)
@@ -401,7 +422,7 @@ function showfile(btn,file){ //show file/folder content from server (library win
 		logdiv.slideUp(200);
 		return false;
 	}
-	if(file.indexOf('.')!=-1){ //file
+	if(~file.indexOf('.')){ //file
 		$.ajax({
 			type: "GET",
 			url: file,
@@ -416,8 +437,13 @@ function showfile(btn,file){ //show file/folder content from server (library win
     else{ //folder
     	communicate('getdir',{dir:'analyses/'+file},{success: function(data){
     		filearr = data.split('|');
-    		str = '';
-    		$.each(filearr,function(i,f){ fdata = f.split(':'); str += fdata[0]+' ('+numbertosize(fdata[1],'byte')+')<br>'; });
+    		var str = '', outfile = ''; //mark resultfile in filelist
+    		$.each(serverdata['analysdata'](),function(i,meta){ if(file==meta.id()) outfile = meta.outfile(); });
+    		$.each(filearr,function(i,f){
+    			fdata = f.split(':');
+    			if(~outfile.indexOf(fdata[0])) fdata[0] = '<span title="Main data file" style="color:darkred;cursor:default">'+
+    			fdata[0]+'</span>';
+    			str += fdata[0]+' ('+numbertosize(fdata[1],'byte')+')<br>'; });
     		logdiv.html(str);
     		logdiv.slideDown(); 
     	}});
@@ -432,27 +458,38 @@ function communicate(action,senddata,options){ //send and receive(+save) data fr
 	var formdata = options.form? new FormData(options.form) : new FormData();
 	formdata.append('action',action);
 	if(action=='getmeta'){
-		if(!senddata.parentid&&model.parentid()) senddata = {parentid:model.parentid()};
+		if(typeof(senddata.parentid)=='undefined' && model.parentid()) senddata = {parentid:model.parentid()};
 	}
 	if(senddata) $.each(senddata,function(key,val){
 		if(typeof(val)=='object') val = JSON.stringify(val);
 		formdata.append(key,val);
 	});
 	var btntxt = options.btntxt || ((typeof(options)=='object' && options.btn)? options.btn.innerHTML : '');
+	var retryfunc = function(){ communicate(action,senddata,options) }; //resend request
+	var restorefunc = function(){ //restore original button function
+    	if(btntxt.indexOf('spinner')==-1) options.btn.innerHTML = btntxt;
+    	options.btn.title = '';
+    	$(options.btn).off('click').click(retryfunc);
+    }
+    var endfunc = ''; //follow-up data refresh
+    if(action=='writemeta'||action=='save'||action=='startalign') var endfunc = function(){
+    	if (action!='save') communicate('alignstatus','','jobdata');
+    	if (action!='startalign') communicate('getmeta',{parentid:parentid(senddata.id)},'analysdata');
+    };
+    if(action=='alignstatus'&&typeof(options)=='string') options = {saveto:options,retry:true}; //retry in case of error
+    		
 	return $.ajax({
 		type: "POST",
 		url: 'index.html',
-		beforeSend : function(xhrobj){ if(btntxt) options.btn.innerHTML = '<img src="img/spinner.gif" class="icn"/>'; },
+		beforeSend : function(xhrobj){
+			if(options.btn){ //make process abortable with action button or window closebutton
+				options.btn.innerHTML = '<img src="img/spinner.gif" class="icn"/>';
+				options.btn.title = 'Click to abort';
+				$(options.btn).off('click').click(function(){ xhrobj.abort() });
+				$(options.btn).closest("div.popupwindow").find("img.closebtn").click(function(){ xhrobj.abort() });
+			}
+		},
     	success: function(data){
-    		//if(btntxt) options.btn.innerHTML = btntxt;
-    		var endfunc = '';
-    		if(action=='writemeta'||action=='save'){
-    			var endfunc = function(data){ //follow-up data refresh
-    				setTimeout(function(){ communicate('alignstatus','','jobdata'); }, 300);
-    				setTimeout(function(){ communicate('getmeta',{parentid:parentid(senddata.id)},'analysdata'); }, 500);
-    			}
-    		}
-    		
     		var successfunc = '';
     		if(action=='save'){
 				successfunc = function(data){
@@ -464,7 +501,9 @@ function communicate(action,senddata,options){ //send and receive(+save) data fr
     			successfunc = function(){
     				if(senddata.parentid){
     					var dirtrail = senddata.parentid.replace(/\/children\//g,' &#x25B8; ');
-       					model.libdir('Main &#x25B8; '+dirtrail+' <br><a class="button small square" onclick="communicate(\'getmeta\',{parentid:\''+parentid(senddata.parentid)+'\'},\'analysdata\'); return false;">&#x25C1; Parent </a>');
+       					model.libdir('Main &#x25B8; '+dirtrail+' <br><a class="button small square" '+
+       					'title="Go to parent directory" onclick="communicate(\'getmeta\',{parentid:\''+
+       					parentid(senddata.parentid)+'\'},\'analysdata\'); return false;">&#x25C1; Parent </a>');
     				}
     				else model.libdir('Main directory');
     			}
@@ -492,30 +531,30 @@ function communicate(action,senddata,options){ //send and receive(+save) data fr
     			options(data);
     		}
     		
-    		if(successfunc) successfunc(data); //custom successfunc
-    		if(endfunc) setTimeout(function(data){ endfunc(data); },400); //follow-up (data refresh)
+    		if(successfunc) successfunc(data); //custom successfunc (data processing/import)
+    		if(options.restore) restorefunc(); //restore original button state (reusable button)
+    		if(endfunc) setTimeout(function(data){ endfunc(data); }, 500); //follow-up (data refresh)
     	},
     	error: function(xhrobj,status,msg){
     		if(typeof(options)=='object'){
-    			if(!msg&&status!="abort"){
-        			if(options.retry){ //no response. try again (x2)
+    			if(!msg&&status!="abort"){ //no response
+        			if(options.retry){ //allow 2 retries
         				options.retry = options.retry=='take2'? false : 'take2';
         				if(btntxt) options.btntxt = btntxt;
-        				setTimeout(function(){ communicate(action,senddata,options) },2000); return;
+        				setTimeout(retryfunc, 2000); return;
         			}
         			msg = 'No response from server. Try again.';
         		}
-        		if(action=='startalign') setTimeout(function(){ communicate('alignstatus','','jobdata'); },400);
-    			else if(options.btn){
-    				options.btn.innerHTML = 'Failed <span class="svgicon" style="margin-right:-10px" title="'+msg+
-    				'">'+svgicon('info')+'</span>';
-    				if(btntxt.indexOf('spinner')==-1) setTimeout(function(){ options.btn.innerHTML = btntxt; },3000);
+    			if(options.btn){
+    				if(status=="abort"){ restorefunc(); }
+    				else{
+    					options.btn.innerHTML = 'Failed <span class="svgicon" style="margin-right:-10px" title="'+msg+'">'+svgicon('info')+'</span>';
+    					setTimeout(restorefunc, 3000);
+    					if(endfunc) setTimeout(function(data){ endfunc(data); }, 500); //data refresh
+    				}
     			}
     		}
-    		else if(typeof(options)=='string'){
-    			if(action=='alignstatus'||action=='writemeta') setTimeout(function(){ communicate('alignstatus','','jobdata'); }, 500);
-    			if((action=='getmeta'||action=='writemeta')&&senddata.parentid) setTimeout(function(){ communicate('getmeta',{parentid:senddata.parentid},'analysdata'); }, 500);
-    		}
+    		else if(typeof(options)=='string' && endfunc) setTimeout(endfunc, 500); //error in serverdata sync. Refresh data.
     	},
     	data: formdata,
     	dataType: "text",
@@ -655,11 +694,12 @@ function parseimport(options){ //options{dialog:jQ,update:true}
    		var id = self.attr("id");
    		var name = self.attr("name") || id;
    		if(metaidnames[name]) name = metaidnames[name];
-   		if(self.attr("name")){ Tidnames[id] = name; }
+   		name = name.replace(/_/g,' ')
+   		if(~name.indexOf('#')) name = 'Node '+name.replace(/#/g,'');
+   		if(id!=name) Tidnames[id] = name;
    		var tmpseq = self.find("sequence").text();
    		if(tmpseq.length != 0){
    			tmpseq = tmpseq.replace(/\s+/g,'');
-   			name = name.replace(/#/g,'');
    			if(Tsequences[name]){ errors.push("Non-unique taxa name found!<br>("+name+")"); }
    			Tsequences[name] = tmpseq.split('');
    		}
@@ -674,10 +714,10 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 			if(Tseqformat=='fasta'){ //match fasta name truncating
 				//treetxt = treetxt.replace(/(['"]\w+)[^'"]+(['"])/g,"$1$2");
 			}
-			treetxt = treetxt.replace(/[\n\r#]+/g,'')+';';
+			treetxt = treetxt.replace(/\n+/g,'');
 		}
 		Ttreedata[format] = treetxt;
-		if(format=='phyloxml' && treetxt.indexOf('<mol_seq')!=-1){ //sequences in tree data
+		if(format=='phyloxml' && ~treetxt.indexOf('<mol_seq')){ //sequences in tree data
 			if(Tsequences) seqoverwrite = true;
 			Tsequences = 'phyloxml';
    			Tseqsource = filename;
@@ -697,19 +737,21 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 			var gotsource = false; Tsequences = {};
 			$.each(file.data[0].homologies,function(j,data){
 				if(!gotsource){
-					Tsequences[data.source.species] = data.source["align_seq"].split('');
-					ensinfo.species = data.source.species.replace('_',' ');
-					nodeinfo[data.source.species] = {type:'source gene',id:data.source.id,species:data.source.species.replace('_',' '),protein:data.source.protein_id};
+					var species = data.source.species.replace('_',' ');
+					Tsequences[data.source.id] = data.source["align_seq"].split('');
+					ensinfo.species = species;
+					nodeinfo[data.source.id] = {genetype:'source gene', cladename:data.source.id, species:species, accession:data.source.protein_id};
 					gotsource = true;
 				}
-				Tsequences[data.target.species] = data.target["align_seq"].split('');
-				nodeinfo[data.target.species] = {type:data.type.replace('_',' '), id:data.target.id, species:data.target.species.replace('_',' '), 
-				protein:data.target.protein_id, srate:data.target.dn_ds, subtype:data.subtype, identity:data.target.perc_id};
+				var species = data.target.species.replace('_',' ');
+				Tsequences[data.target.id] = data.target["align_seq"].split('');
+				nodeinfo[data.target.id] = {genetype:data.type.replace(/_/g,' ').replace('2',' to '), cladename:data.target.id, species:species, 
+				accession:data.target.protein_id, srate:data.target.dn_ds, taxaname:data.subtype, identity:data.target.perc_id};
 			});
 		}
 		else if(typeof(file)!='string'){ errors.push("Couldn't identify fileformat for "+filename); return true; }
 		else if(/^<.+>$/m.test(file)){ //xml
-			if(file.indexOf("<phyloxml")!=-1){ //phyloxml tree
+			if(~file.indexOf("<phyloxml")){ //phyloxml tree
 				parsetree(file,filename,'phyloxml');
 			}
 			else{  //HSAML
@@ -747,7 +789,7 @@ function parseimport(options){ //options{dialog:jQ,update:true}
    			file = file.substring(file.search(/[\n\r]/)); //remove first line
    			parseseq(file,filename,'phylip',narr[1],narr[2]);
    		}
-   		else if(file.indexOf("#NEXUS")!=-1){ //NEXUS
+   		else if(~file.indexOf("#NEXUS")){ //NEXUS
    			var blockexp = /begin (\w+);/igm;
    			var result = '', hastree=false, hasseq=false;
    			while(result = blockexp.exec(file)){ //parse data blocks
@@ -784,52 +826,46 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 	
 	var namearr = [];
 	//if(!Tsequences && $.isEmptyObject(sequences)) errors.push("Sequence data is missing");
-	if(typeof(Tsequences)=='object') namearr = Object.keys(Tsequences);
-	
-	if(!Ttreedata && namearr.length){
-		//no tree: fill placeholders (otherwise done by jsPhyloSVG)
-		visiblerows.removeAll(); leafnodes = {};
-		var nodecount = 0; var leafcount = namearr.length; Ttreesource = false;
-		$.each(namearr,function(indx,arrname){
-			leafnodes[arrname] = {name:arrname};
-			if(nodeinfo[arrname]) $.each(nodeinfo[arrname],function(k,v){ leafnodes[arrname][k] = v; });
-			visiblerows.push(arrname); 
-		});
+	if(typeof(Tsequences)=='object'){
+		$.each(Tsequences,function(name,seq){ if(~name.indexOf('_')){ //make spaces in names
+			Tsequences[name.replace(/_/g,' ')] = seq;
+			delete Tsequences[name]; 
+		}});
+		namearr = Object.keys(Tsequences);
 	}
-	else if(typeof(Ttreedata)=='object'){ //check sequence data compatibility with the tree
-		var nodecount = Ttreedata.phyloxml ? $(Ttreedata.phyloxml).find("clade").length : Ttreedata.newick.match(/\(/g).length;
-		var leafcount = Ttreedata.phyloxml ? $(Ttreedata.phyloxml).find("name").length : Ttreedata.newick.match(/,/g).length+1;
-		if(typeof(Tsequences)=='object' && leafcount>namearr.length) notes.push("Some tree leafs have no sequence data");
-		/*$.each(namearr,function(indx,name){
-			if(Ttreedata[treetype].indexOf(name)==-1){ errors.push("Some sequence names missing from the tree <br> ('"+name+"' etc.)"); return false; }
-		});*/
-	}
-	//var seqnames = Object.keys(Tnames).sort(); var treenames = Ttreedata.newick.match(/[a-z]+\w+/ig).sort();
 	
-	if(errors.length==0){ //no errors - use parsed data
+	if(errors.length==0){ //no errors: use parsed data
 		if(options.importbtn){
 			options.importbtn.html('Imported');
 			setTimeout(function(){ options.importbtn.closest(".popupwindow").find(".closebtn").click() }, 2000);
 		}
 		if(treeoverwrite){ notes.push('Tree data found in multiple files. Using '+Ttreesource); }
 		if(seqoverwrite){ notes.push('Sequence data found in multiple files. Using '+Tseqsource); }
-		if(notes.length!=0){
-			var ul = document.createElement("ul");
-			$.each(notes,function(j,note){ $(ul).append("<li>"+note+"</li>") }); 
-			setTimeout(function(){ makewindow('File import warnings',['<br>',ul,'<br>'],{btn:'OK',icn:'info.png'}); }, 3000); 
+		
+		if(!Ttreedata && namearr.length){ //no tree: fill placeholders (otherwise done by jsPhyloSVG)
+			visiblerows.removeAll(); leafnodes = {};
+			var nodecount = 0, leafcount = namearr.length; Ttreesource = false;
+			$.each(namearr,function(indx,arrname){
+				leafnodes[arrname] = {name:arrname};
+				if(nodeinfo[arrname]) leafnodes[arrname].ensinfo = nodeinfo[arrname];
+				visiblerows.push(arrname); 
+			});
+		} else if(Ttreedata){ //get leaf count estimate
+			var nodecount = Ttreedata.phyloxml ? $(Ttreedata.phyloxml).find("clade").length : Ttreedata.newick.match(/\(/g).length;
+			var leafcount = Ttreedata.phyloxml ? $(Ttreedata.phyloxml).find("name").length : Ttreedata.newick.match(/,/g).length+1;
 		}
 		
 		if(Ttreedata){ //tree data drop in
-	  		model.treesource(Ttreesource); model.treesnapshot = ''; model.leafcount(leafcount); //leafcount > tree canvas height
-	  		model.undostack.remove(function(item){ return item.type=='tree'} );
-	  		if(Tsequences=='phyloxml'){ idnames= {}; sequences = {}; }
-	  		if(!$.isEmptyObject(treesvg)){
-	  			if(Tsequences=='phyloxml') Ttreedata.treeonly = true; //skip sequence drawing step
-	  			idnames = Tidnames;
-	  			treesvg.loaddata(Ttreedata);
+	  		model.treesource(Ttreesource); model.leafcount(leafcount); //leafcount > tree canvas height
+	  		model.treesnapshot = ''; idnames = Tidnames;
+	  		if(!$.isEmptyObject(nodeinfo)) Ttreedata.nodeinfo = nodeinfo;
+	  		if(Tsequences=='phyloxml'){ idnames= {}; sequences = {}; } //sequence data will come from phyloxml
+	  		if(!$.isEmptyObject(treesvg)){ //replace current tree
+	  			if(Tsequences=='phyloxml') Ttreedata.treeonly = true; //skip sequence drawing step (do it after seq. analysis)
+	  			treesvg.loaddata(Ttreedata); //loads treedata (and redraws sequences)
 	  		}
-	  		else if(Tsequences=='phyloxml') redraw(Ttreedata); //get sequence data from phyloxml
-	  	} else treesvg = {}; //only seq. data given: empty tree canvas
+	  		else if(Tsequences=='phyloxml') redraw(Ttreedata); //Make tree canvas. Get sequence data from phyloxml
+	  	} else { treesvg = {}; model.treesource(''); model.treealtered(false); }//only seq. data given: empty tree canvas
 		
 		var newcolors = false;
 	  	if(namearr.length||Tsequences=='phyloxml'){ //sequence data drop in
@@ -838,7 +874,7 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 			var longestseq = '', hasdot = false;
 			for(var n=0;n<namearr.length;n++){ //count sequence lengths
 				var tmpseq = Tsequences[namearr[n]].join('');
-				if(!hasdot && tmpseq.indexOf('.')!=-1) hasdot = true;
+				if(!hasdot && ~tmpseq.indexOf('.')) hasdot = true;
 				if(tmpseq.length >= Talignlen){ Talignlen = tmpseq.length }
 				tmpseq = tmpseq.replace(/-/g,'');
 				var seqlen = tmpseq.length;
@@ -857,28 +893,36 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 			model.seqsource(Tseqsource); maskedcols = [];
 			visiblecols.removeAll(); for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark visible columns
 			model.undostack.remove(function(item){ return item.type=='seq'} );
-			makecolors();
-			if(options.id){
-				model.currentid(options.id);
-        		communicate('writemeta',{id:options.id,key:'imported'});
-        	} 
+			makecolors(); 
 	  	}
-	  
-	  	model.activeundo(''); model.treealtered(false);
+	  	
+	  	model.ensinfo(ensinfo);
+	  	model.undostack.remove(function(item){ return item.type=='tree'} ); //empty undostack of previous tree
+	  	model.refreshundo();
    	  	if($.isEmptyObject(treesvg)||newcolors||Ttreedata.treeonly){
    	  		if(Ttreedata.treeonly) Ttreedata.treeonly = false;
    	  		redraw(Ttreedata||'');
+   	  		var emptyleaves = [];
+   	  		$.each(leafnodes,function(name,node){ if(!sequences[name]) emptyleaves.push(name); });
+   	  		if(emptyleaves.length) notes.push("These tree leafs have no sequence data:<br>"+emptyleaves.join(', '));
    	  	}
+   	  	
    	  	if(options.source){
    	  		var src = options.source;
-   	  		var sourcetype = src=='localread'||src=='upload'? 'local computer' : src.indexOf('import')!=-1? 'analysis library' : src=='download'? 'internet' : options.source;
+   	  		var sourcetype = src=='localread'||src=='upload'? 'local computer' : ~src.indexOf('import')? 'analysis library' : src=='download'? 'internet' : options.source;
    	  		model.sourcetype(sourcetype);
    	  	}
-   	  	model.ensinfo(ensinfo);
-   	  	$.each(leafnodes, function(nodename,node){ //load ensembl info => {"species_name":{info}}
-   	  		if(nodeinfo[nodename]) node.ensinfo = nodeinfo[nodename];
-   	  	});
+   	  	
+   	  	if(options.id){ //save import date in server
+			model.currentid(options.id);
+        	communicate('writemeta',{id:options.id,key:'imported'});
+        }
    	  	serverdata.importdata = ko.mapping.fromJS({});
+   	  	if(notes.length!=0){
+			var ul = document.createElement("ul");
+			$.each(notes,function(j,note){ $(ul).append("<li>"+note+"</li>") }); 
+			setTimeout(function(){ makewindow('File import warnings',['<br>',ul,'<br>'],{btn:'OK',icn:'info.png'}); }, 2000); 
+		}
    	  	return true;
 	} else { //diplay errors; no import
 		var ul = document.createElement("ul");
@@ -1082,33 +1126,52 @@ function redraw(options){
 	  						helper = movenode('drag',draggednode,dragged);
 	  						dragmode = true;
 	  					}
-	  					if(helper) helper.css({left:evt.pageX+15,top:evt.pageY-5});
+	  					if(helper) helper.css({left:evt.pageX+15,top:evt.pageY});
 	  				}
 	  	}); } });
-	  } else { //no tree - make placeholder
+	  } else { //no tree: make tree/leafname placeholders
 		dom.tree.empty(); dom.names.empty();
 		dom.treewrap.css('background-color','transparent');
 		$("#notree").fadeIn(); $("#tree").css('box-shadow','-2px 0 2px #ccc inset');
 		$.each(visiblerows(),function(n,name){
-			name = name.replace(/_/g,' ');
-			var nspan = $('<span style="height:'+model.boxh()+'px;font-size:'+model.fontsize()+'px">'+name+'</span>');
+			var leafname = leafnodes[name].ensinfo? leafnodes[name].ensinfo.species : name;
+			var nspan = $('<span style="height:'+model.boxh()+'px;font-size:'+model.fontsize()+'px">'+leafname+'</span>');
+			
 			var hovertimer;
-			nspan.mouseenter(function(){
+			nspan.mouseenter(function(){ //show full leaf name on mouseover
+				if(leafnodes[name].ensinfo) nspan.css('cursor','pointer');
 				hovertimer = setTimeout(function(){
 					$label.css({
 						'font-size' : model.fontsize()+'px',
 						'top': nspan.offset().top+'px',
 						'left' : $("#right").position().left-14+'px'
 					});
-					$labelspan.css('margin-left',0-dom.names.innerWidth()+5+'px'); $labelspan.text(name);
+					$labelspan.css('margin-left',0-dom.names.innerWidth()+5+'px'); $labelspan.text(leafname);
 					$label.css('display','block'); setTimeout(function(){ $label.css('opacity',1) },50);
 				},800);
-			}); 
+			});
 			nspan.mouseleave(function(){ 
 				clearTimeout(hovertimer);
 				$label.css('opacity',0);
 				setTimeout(function(){$label.hide()},500); 
 			});
+			if(leafnodes[name].ensinfo){ //leaf menu for ensembl info (treeless import)
+				var ens = leafnodes[name].ensinfo;
+				leafnodes[name].displayname = ens.species;
+				nspan.click(function(){
+					var ensmenu = {};
+					if(ens.taxaname) ensmenu['<span class="note">Taxa</span> '+ens.taxaname] = '';
+    				if(ens.cladename&&ens.species) ensmenu['<span class="note">Gene</span> '+
+    					'<a href="http://www.ensembl.org/'+ens.species.replace(' ','_')+
+    					'/Gene/Summary?g='+ens.cladename+'" target="_blank" title="View in Ensembl">'+ens.cladename+'</a>'] = '';
+    				if(ens.accession&&ens.species) ensmenu['<span class="note">Protein</span> '+
+    					'<a href="http://www.ensembl.org/'+ens.species.replace(' ','_')+'/Transcript/ProteinSummary?p='+
+    					ens.accession+'" target="_blank" title="View in Ensembl">'+ens.accession+'</a>'] = '';
+    				hidetooltip();
+    				setTimeout(function(){ tooltip('',ens.genetype,{arrow:'top', id:'namemenu', data:ensmenu, target:{startx:$("#names").offset().left+($("#names").width()/2), starty:nspan.offset().top, shifty:model.boxh()}}) },100);
+				});
+			}
+			
 			dom.names.append(nspan);
 		});
 	  }
@@ -1128,7 +1191,7 @@ function redraw(options){
 		if(model.zoomlevel()<3){ dom.treewrap.addClass('minimal'); } else { dom.treewrap.removeClass('minimal'); }
 		dom.wrap.css('left',Math.round(left)); dom.seq.css('margin-top',Math.round(top));
 		dom.treewrap.animate({height:newheight,top:Math.round(top)},500,'linear');
-		if(model.treesource()) $("#names svg").animate({'font-size':model.fontsize()},500,'linear');
+		if(!$.isEmptyObject(treesvg)) $("#names svg").animate({'font-size':model.fontsize()},500,'linear');
 		else $("#names span").css({'height':model.boxh()+'px','font-size':model.fontsize()+'px'});
 	}
 	dom.seq.css({ 'width':newwidth, 'height':newheight });
@@ -1138,8 +1201,8 @@ function redraw(options){
 
 function refresh(e,hidemenu){ //redraw tree & sequence
 	if(e) e.stopPropagation();
-	if(hidemenu) $('html').click();//hidetooltip();
-	treesvg.refresh();
+	if(hidemenu) $('html').click();//hidetooltip()
+	if(treesvg.refresh) treesvg.refresh();
 };
 
 function makeCanvases(){
@@ -1235,11 +1298,11 @@ function makeImage(target){
 				var canv = canvas.getContext('2d');
 				//canv.clearRect(0,0,canvas.width,canvas.height);
 				while(rowdraws[r+'|'+c].canvasrow < endrow){
-					var data = sequences[visiblerows()[rowdraws[r+'|'+c].canvasrow]];
-					if(!data){ rowdraws[r+'|'+c].canvasrow++; continue; }//no sequence data: skip
-					var endcol = rowdraws[r+'|'+c].col+colstep>data.length ? data.length : rowdraws[r+'|'+c].col+colstep;
+					var seqdata = sequences[visiblerows()[rowdraws[r+'|'+c].canvasrow]];
+					if(!seqdata) continue; //no sequence data: skip row
+					var endcol = rowdraws[r+'|'+c].col+colstep>seqdata.length ? seqdata.length : rowdraws[r+'|'+c].col+colstep;
 					for(var canvascol=c;canvascol<endcol;canvascol++){
-						seqletter = data[visiblecols()[canvascol]];
+						seqletter = seqdata[visiblecols()[canvascol]];
 						if(!symbols[seqletter]){ symbols[seqletter] = symbols['?'] }
 						canv.drawImage( symbols[seqletter]['canvas'], (canvascol - rowdraws[r+'|'+c].col)*model.boxw()+1, (rowdraws[r+'|'+c].canvasrow - rowdraws[r+'|'+c].row)*model.boxh()+1);
 					}
@@ -1276,7 +1339,7 @@ function makeRuler(){
 		var l = capindex*model.boxw()-7;
 		var colspan = ecol-scol;
 		var div = $('<div class="marker" style="left:'+l+'px">&#x25BC</div>');
-		div.mouseenter(function(e){ tooltip(e,'Click to reveal '+colspan+' hidden columns.',{target:div}) });
+		div.mouseenter(function(e){ tooltip(e,'Click to reveal '+colspan+' hidden columns.',{target:div[0]}) });
 		div.click(function(){
 			for(var c=scol;c<ecol;c++,capindex++){ visiblecols.splice(capindex,0,c); } 
 			hidetooltip(); redraw(); 
@@ -1347,9 +1410,9 @@ function movenode(drag,movednode,movedtype){ //Create 'move node' mode (tree bra
 	  		var helper = $(movednode.makeCanvas()).attr('id','draggedtree');
 	  	}
 	  	else if(movedtype=='tspan'){
-	  		var helper = $('<div id="draggedlabel">'+movednode.name.replace(/_/g,' ')+'</div>');
+	  		var helper = $('<div id="draggedlabel">'+(movednode.displayname||movednode.name)+'</div>');
 	  	}
-	  	$("#page").append(helper);
+	  	$("body").append(helper);
 	}//drag
 	$("body").one('mouseup',function(evnt){
 		var targettype = evnt.target.tagName;
@@ -1371,7 +1434,7 @@ function movenode(drag,movednode,movedtype){ //Create 'move node' mode (tree bra
 function tooltip(evt,title,options){ //make tooltips & pop-up menus
 	if(!options) options = {};
 	if(typeof(title)=='string') title = title.replace(/#/g,'');
-	if(options.tooltip){
+	if(options.tooltip){ //use existing tooltip
 		var tipdiv = $(options.tooltip);
 		var tiparrow = $(".arrow",tipdiv);
 		var tiptitle = $(".tooltiptitle",tipdiv);
@@ -1396,64 +1459,75 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
 		var arr = options.arrow;
 		tipdiv.addClass(arr+'arrow');
 	} else var arr = false;
-	if(options.style) tipdiv.addClass(options.style);
+	var tipstyle = options.style||settings.tooltipclass()||'';
 	
-	var node = options.target || evt.target || false;
-	if(node){ //tooltip placement
+	var node = options.target || {};
+	if(tipstyle!='none' && !node.edgeCircleHighlight) tipdiv.addClass(tipstyle); //custom style (excludes treemenu)
+	var x = !isNaN(node.startx)? node.startx:evt.pageX, y = !isNaN(node.starty)? node.starty:evt.pageY;
+	x+=node.shiftx||0; y+=node.shifty||0;
+	if(!$.isEmptyObject(node)){ //place according to target element
+		if(node.jquery) node = node[0];
+		if(!node.width) node.width = 0; if(!node.height) node.height = 0;
     	if(node.edgeCircleHighlight){
-    		var x = $(node.edgeCircleHighlight.node).offset().left+25;
-    		var y = $(node.edgeCircleHighlight.node).offset().top-7;
-    	} 
-    	else if(!isNaN(node.pageX)||!isNaN(node.startx)){ //place as seqinfo tooltip
-    		var boxoffset = options.container? $(options.container).offset() : 0;
-    		var x = !isNaN(node.startx)? node.startx : node.clientX-boxoffset.left;
-    		var y = !isNaN(node.starty)? node.starty : node.clientY-boxoffset.top;
-    		node.height = !isNaN(node.startx)? model.boxh() : 0;
-    		node.width = !isNaN(node.starty)? model.boxw() : 0;
-    		if(arr=='left' && options.container=="#seq"){ x += node.width+13; y += (node.height/2)-11; }
+    		x = $(node.edgeCircleHighlight.node).offset().left+25;
+    		y = $(node.edgeCircleHighlight.node).offset().top-7;
     	}
-    	else {
+    	else if(node.tagName){ //target DOM element
+    		var elem = $(node);
+    		if(!node.width) node.width = elem.width();
+    		if(!node.height) node.height = elem.height();
     		if(node.tagName=='LI'){ //place as submenu
-    			var x = $(node).innerWidth()-5;
-    			var y = $(node).position().top-3;
+    			x = elem.innerWidth()-5;
+    			y = elem.position().top-3;
     		}
-    		else{
-    			var x = $(node).offset().left+15;
-    			var y = $(node).offset().top+15;
-    			if($(node).hasClass('svgicon')){ x+=20; y-=18; }
-    			if(!arr) y+= options.height||$(node).height();
+    		else{ //place next to element
+    			x = elem.offset().left+15;
+    			y = elem.offset().top+15;
+    			if(elem.hasClass('svgicon')){ x+=20; y-=18; }
+    			if(!arr) y+= node.height;
     		}
     	}
-    	if(arr=='top') y+=(node.height||$(node).height())+9;
-    } else { var x = evt.pageX+10; var y = evt.pageY+10; }
+    	if(arr=='top') y+=node.height+10;
+    } else { x+=5; y+=5; } //place next to cursor
     var rightedge = $('body').innerWidth()-200;
     if(!options.container && x > rightedge) x = rightedge;
     if(!options.svg) tipdiv.css({left:parseInt(x),top:parseInt(y)});
-    		
+    	
     if(options.data){ //generate pop-up menu
-      if(options.svg && node){ //tree node popup menu
+      if(options.svg && node.edgeCircleHighlight){ //tree node popup menu
       	var hiddencount = node.leafCount - node.visibleLeafCount;
-    	var nodetitle = $('<span class="right">'+(hiddencount?' <span class="svgicon" title="Hidden leaves">'+svgicon('hide')+'</span>'+hiddencount : '')+'</span>');
-    	var nodeicon = $('<span class="svgicon">'+svgicon('info')+'</span>').css({'margin-left':'10px', 'padding-right':0,cursor:'pointer'});
-    	nodeicon.mouseenter(function(e){ //node info
-    		var nodeul = $('<ul>'); if(node.children.length) nodeul.append('<li>Visible leaves: '+node.visibleLeafCount+'</li>');
+    	var nodeicon = $('<span class="right">'+(hiddencount?' <span class="svgicon" style="padding-right:0" title="Hidden leaves">'+svgicon('hide')+'</span>'+hiddencount : '')+'</span>');
+    	if(hiddencount && node.name.length>10) nodeicon.css({position:'relative',right:'0'});
+    	var infoicon = $('<span class="svgicon">'+svgicon('info')+'</span>').css({cursor:'pointer'}); //info icon
+    	infoicon.mouseenter(function(e){ //hover infoicon=>show info
+    		var nodeul = $('<ul>');
+    		if(node.children.length) nodeul.append('<li>Visible leaves: '+node.visibleLeafCount+'</li>');
     		if(hiddencount) nodeul.append('<li>Hidden leaves: '+hiddencount+'</li>');
     		nodeul.append('<li>Branch length: '+(Math.round(node.len*1000)/1000)+'</li>','<li>Length from root: '+(Math.round(node.lenFromRoot*1000)/1000)+'</li>','<li>Levels from root: '+node.level+'</li>');
     		if(node.confidence) nodeul.append('<li>Branch support: '+node.confidence+'</li>');
-    		var nodetip = tooltip(e,'',{target:nodeicon,data:nodeul[0],arrow:'left',style:'nomenu'});
+    		if(node.events){ //gene evol. events (ensembl)
+    			if(node.events.duplications) nodeul.append('<li>Duplications: '+node.events.duplications+'</li>');
+    			if(node.events.speciations) nodeul.append('<li>Speciations: '+node.events.speciations+'</li>');
+    		}
+    		if(node.taxaid) nodeul.append('<li>Taxonomy ID: '+node.taxaid+'</li>');
+    		if(node.ec) nodeul.append('<li>EC number: '+node.ec+'</li>');
+    		var nodetip = tooltip(e,'',{target:infoicon[0],data:nodeul[0],arrow:'left',style:'nomenu'});
     		nodeicon.one('mouseleave',function(){ hidetooltip(nodetip) });
     	});
-    	nodetitle.append(nodeicon);
-    	tiptitle.html(node.parent?title:'Root');
-    	tiptitle.append(nodetitle);
+    	nodeicon.append(infoicon);
+    	var hovertitle = node.species? 'title="Taxa '+node.name+'"': node.name.length>12? 'title="'+node.name+'"': '';
+    	if(!node.parent && !node.species) title = 'Root';
+    	title = '<span class="title" '+hovertitle+'">'+title+'</span>'; //limits too long titles
+    	tiptitle.html(title); //replace previous tooltip with menu header
+    	tiptitle.append(nodeicon);
     	var ul = $('<ul>');
     	var hideli = $('<li class="arr" '+(node.parent?'':'style="color:#888"')+'><span class="svgicon" title="Collapse node and its children">'+svgicon('hide')+'</span>Hide this node <span class="right">\u25B8</span></li>');
-    	hideli.click(function(){ node.hideToggle(); refresh('','menu'); });
+    	hideli.click(function(){ node.hideToggle(); refresh('','hidemenus'); });
     	var hidemenu = {};
     	$.each(node.children,function(i,child){ //child nodes submenu
     		if (child.type == 'ancestral') return true; //skip anc.
     		var litxt = '<span class="svgicon" title="(Un)collapse a child node">'+(i==0?svgicon('upper'):svgicon('lower'))+'</span>'+(child.hidden?'Show ':'Hide ')+(i==0?'upper ':'lower ')+' child';
-    		hidemenu[litxt] = { click: function(e){ child.hideToggle(); refresh(e,'menu'); } };
+    		hidemenu[litxt] = {click:function(e){child.hideToggle(); refresh(e,'hidemenus')}};
     		if(child.children.length && child.hidden){ //preview hidden children
     			var createpreview = function(){ //create treepreview on the fly
     				var preview = $('<span style="margin-left:5px" class="svgicon">'+svgicon('view')+'</span>');
@@ -1461,7 +1535,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     				preview.mouseenter(function(e){
     					var pcanvas = child.makeCanvas();
     					pcanvas.style.borderRadius = '2px';
-    					ptip = tooltip(e,'',{target:preview,data:pcanvas,arrow:'left'});
+    					ptip = tooltip(e,'',{target:preview[0],data:pcanvas,arrow:'left',style:'none'});
     					preview.one('mouseleave',function(){ hidetooltip(ptip); });
     				});
     				return preview;
@@ -1469,8 +1543,8 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     			hidemenu[litxt]['append'] = createpreview;
     		}
     	});
-    	hidemenu['<span class="svgicon" title="Uncollapse all child nodes">'+svgicon('children')+'</span>Show all children'] = function(e){ node.showSubtree(); refresh(e,'menu'); };
-    	hideli.mouseenter(function(evt){ tooltip(evt,'',{target:hideli[0],data:hidemenu}); });
+    	hidemenu['<span class="svgicon" title="Uncollapse all child nodes">'+svgicon('children')+'</span>Show all children'] = function(e){ node.showSubtree(); refresh(e,'hidemenus'); };
+    	hideli.mouseenter(function(evt){ tooltip(evt,'',{target:hideli[0],data:hidemenu,style:'none'}); });
     	var ancnode = node.children[node.children.length-2];
     	if(ancnode.type=='ancestral'){ //ancestral nodes submenu
     		var h = ancnode.hidden? 'Show':'Hide';
@@ -1479,7 +1553,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     		var ancmenu = {};
     		ancmenu['<span class="svgicon" title="Show ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Show subtree ancestors'] = function(e){ node.showSubtree('anc'); refresh(e,'menu'); };
     		ancmenu['<span class="svgicon" title="Hide ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Hide subtree ancestors'] = function(e){ node.showSubtree('anc','hide'); refresh(e,'menu'); };
-    		ancli.mouseenter(function(evt){ tooltip(evt,'',{target:ancli[0],data:ancmenu}); });
+    		ancli.mouseenter(function(evt){ tooltip(evt,'',{target:ancli[0],data:ancmenu,style:'none'}); });
     	} else var ancli = '';
     	var swapli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Swap places of child nodes">'+svgicon('swap')+'</span>Swap children</li>');
     	swapli.click(function(){ node.swap(); refresh(); });
@@ -1487,57 +1561,66 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     	if(moveli) moveli.click(function(){ movenode('',node,'circle'); });
     	var rerootli = node.parent? $('<li><span class="svgicon" title="Place this node as the tree outgroup">'+svgicon('root')+'</span>Place root here</li>') : '';
     	if(rerootli) rerootli.click(function(){ node.reRoot(); refresh(); });
-    	var remli = node.parent? $('<li><span class="svgicon" title="Remove this node and its children from the tree">'+svgicon('trash')+'</span>Remove node</li>') : '';
-    	if(remli) remli.click(function(){ node.remove(); refresh(); });
-    	var expli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Export this subtree in newick format">'+svgicon('file')+'</span>Export data</li>');
+    	var remli = node.parent? $('<li><span class="svgicon" title="Remove this node and its children from the tree">'+svgicon('trash')+'</span>Remove node '+(node.leafCount>2?'<span class="right">\u25B8</span>':'')+'</li>') : '';
+    	if(remli){
+    		remli.click(function(){ node.remove(); refresh(); });
+    		if(node.leafCount>2){
+    			var prunemenu = {};
+    			prunemenu['<span class="svgicon" title="Remove all nodes except this subtree">'+svgicon('prune')+'</span>Prune subtree'] = function(e){ node.prune(); refresh(e,'menu'); };
+    			remli.mouseenter(function(evt){ tooltip(evt,'',{target:remli[0],data:prunemenu,style:'none'}); });
+    		}
+    	}
+    	var expli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Export this subtree in newick format">'+svgicon('file')+'</span>Export subtree</li>');
     	expli.click(function(){ hidetooltip(tipdiv); dialog('export',{nodeexport:node.write()}); });
     	ul.append(hideli,ancli,swapli,moveli,rerootli,remli,expli);
     	tipcontent.append(ul);
-    	tipcontentwrap.css('height',tipcontent.innerHeight()+'px'); //slidedown
+    	tipcontentwrap.css({'overflow':'hidden','height':tipcontent.innerHeight()+'px'}); //slidedown
+    	setTimeout(function(){tipcontentwrap.css('overflow','visible')},500);
       }
       else{ //general pop-up menu
-      	if(options.data.tagName) tipcontent.append(options.data); //insert DOM element
+      	if(options.data.tagName) tipcontent.append(options.data); //DOM element in tooltip
       	else{ //list-type menu
       		var ul = $('<ul>');
       		var hassubmenu = false;
     		$.each(options.data,function(txt,obj){
     			var li = $('<li>');
-	    		if(typeof(obj)=='object'){ //nested menu
-    				li.click(obj['click']);
-    				if(obj['submenu']){//submenu
-    					li.html(txt+'<span class="right">\u25B8</span>');
+	    		if(typeof(obj)=='object'){
+    				if(typeof li.click=='function') li.click(obj.click);
+    				if(obj.submenu && !$.isEmptyObject(obj.submenu)){ //nested submenu
+    					li.html(txt+' <span class="right">\u25B8</span>');
     					li.addClass('arr');
-    					li.mouseenter(function(evt){ tooltip(evt,'',{target:li[0],data:obj['submenu']}); }); 
-	    			} else { li.html(txt); }
-    				if(obj['mouseover']){ li.mouseenter(obj['mouseover']); }
-    				if(obj['mouseout']){ li.mouseleave(obj['mouseout']); }
-    				if(obj['append']){ li.append(obj['append']); }
+    					li.mouseenter(function(evt){ tooltip(evt,'',{target:li[0],data:obj.submenu}) }); 
+	    			}
+	    			else li.html(txt);
+    				if(obj.mouseover){ li.mouseenter(obj.mouseover); }
+    				if(obj.mouseout){ li.mouseleave(obj.mouseout); }
+    				if(obj.append){ li.append(obj.append); }
     			}
 	    		else{
     				li.html(txt);
-    				li.click(obj);
+    				if(typeof obj=='function') li.click(obj);
 				}
 				ul.append(li);
     		});
     		tipcontent.append(ul);
 	    	if(title){ tiptitle.text(title); }else{ tiptitle.css('display','none'); ul.css('border-top','none'); }
-    		if(node && node.tagName == 'LI'){//submenu
+    		if(node.tagName && node.tagName == 'LI'){//submenu
     			$(node).append(tipdiv);
 		   		$(node).one('mouseleave',function(){ hidetooltip(tipdiv); }); 
     		}
-      		$('html').one('click', function(){ hidetooltip('','','noinfo'); if(node.treenode) node.treenode.unhighlight(); });
+      		$('html').one('click', function(){ hidetooltip('','','seqmenu'); if(node.treenode) node.treenode.unhighlight(); });
      	}
    	  }
    }
-   else{ //tooltip
-		if(!node.parent&&node.len){ title = 'Root node'; }
+   else{ //simple tooltip
+		if(!node.parent&&node.len&&!node.species){ title = 'Root node'; } //tree tooltip
     	tiptitle.empty().append(title);
-    	if(node.nodeType) $(node).mouseleave(function(){ hidetooltip(tipdiv); });
-    	else if(!node.edgeCircleHighlight&&!options.nohide) setTimeout(function(){ hidetooltip(tipdiv) },options.autohide||3000); //self-hide
+    	if(node.nodeType) $(node).mouseleave(function(){ hidetooltip(tipdiv); }); //self-hide
+    	else if(!node.edgeCircleHighlight&&!options.nohide) setTimeout(function(){ hidetooltip(tipdiv) },options.autohide||3000);
    }
-   if(arr=='top'||arr=='bottom'){
+   if(arr=='top'||arr=='bottom'){ //center arrowed tooltip 
    		var adj = tipdiv.innerWidth()/2; 
-   		if(node) adj-=(node.width||$(node).innerWidth())/2; 
+   		if(node.width) adj-=(node.width)/2; 
    		tipdiv.css('left','-='+adj);
    		if(arr=='bottom') tipdiv.css('top','-='+(tipdiv.innerHeight()+19));
    }
@@ -1545,8 +1628,12 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
    return tipdiv;
 }
 
-function hidetooltip(tooltip,exclude,noinfo){
-	if(noinfo){ $("#rborder").removeClass('opaque'); $("#rborder").css('display','none'); }
+function hidetooltip(tooltip,exclude,seqmenu){
+	if(seqmenu){ //clear sequence menu => cleanup
+		$("#rborder").removeClass('opaque'); $("#rborder").css('display','none');
+		$("#seq div[class^='selection']").css({'border-color':'','color':''}); activeid = '';
+		if(model.selmode()=='default') setTimeout(function(){$("#seq div.selectioncross").css('display','none')},500);
+	}
 	tooltips = tooltip&&!exclude ? $(tooltip) : $("div.tooltip");
 	if(exclude) tooltips = tooltips.not(tooltip);
 	tooltips.each(function(){
@@ -1677,14 +1764,14 @@ function clearselection(id){
 	else{ $("#seq div.selection").each(function(){ id = this.id.substr(9); $("#selection"+id).remove(); $("#vertcross"+id).remove(); $("#horicross"+id).remove(); }); }
 }
 
-function toggleselection(type){ //toggle row/column selection
-	if(type=='default'){ toggleselection('hide rows'); type='hide columns'; }
-	else if(type=='columns'){ toggleselection('hide rows'); type='show columns'; }
-	else if(type=='rows'){ toggleselection('show rows'); type='hide columns'; }
-	var divs = type.indexOf('rows')!=-1 ? $('div[id^="horicross"]') : ('div[id^="vertcross"]');
-	$(divs).each(function(){
-		if(type.indexOf('show')!=-1){ $(this).fadeIn(200); } else { $(this).fadeOut(200); }
-	}); 
+function toggleselection(type,id,exclude){ //toggle row/column selection
+	if(typeof id=='undefined') id=''; if(typeof exclude=='undefined') exclude='';
+	if(type=='default'){ toggleselection('hide rows',id); type='hide columns'; } //actions for selection mode change
+	else if(type=='columns'){ toggleselection('hide rows',id); type='show columns'; }
+	else if(type=='rows'){ toggleselection('show rows',id); type='hide columns'; }
+	var divs = ~type.indexOf('rows')? $('div[id^="horicross'+id+'"]') : $('div[id^="vertcross'+id+'"]');
+	if(exclude) divs = divs.not('div[id$="cross'+exclude+'"]'); //filter out some divs
+	$(divs).each(function(){ if(~type.indexOf('show')) $(this).fadeIn(200); else $(this).fadeOut(200); }); 
 }
 
 function seqinfo(e){ //character info tooltip (on sequence click)
@@ -1694,16 +1781,16 @@ function seqinfo(e){ //character info tooltip (on sequence click)
 	var y = e.pageY-dom.seq.offset().top-2;
 	y = parseInt(y/model.boxh());
 	if(x<0){ x=0; } if(y<0){ y=0; }
-	var col = visiblecols()[x]; var rowid = visiblerows()[y];
-	if(!sequences[rowid]) return false;
+	var col = visiblecols()[x]; var name = visiblerows()[y];
+	if(!sequences[name]) return false;
 	var suppl = col==x ? '' : '<br>(column '+(col+1)+' if uncollapsed)';
-	var seqpos = sequences[rowid].slice(0,col+1).join('').replace(/[_\-.:]/g,'').length;
-	var symb = typeof(sequences[rowid][col])=='undefined' ? '' : sequences[rowid][col];
+	var seqpos = sequences[name].slice(0,col+1).join('').replace(/[_\-.:]/g,'').length;
+	var symb = typeof(sequences[name][col])=='undefined' ? '' : sequences[name][col];
 	symb = canvaslabels[symb]||symb;
 	var symbcanvas = typeof(symbols[symb])!='undefined'? symbols[symb]['refcanvas'] : '<span style="color:orange">'+symb+'</span>';
-	var name = typeof(leafnodes[rowid])=='undefined' ? '' : leafnodes[rowid].name;
-	var content = $('<span style="color:orange">'+name.replace(/_/g,' ')+'</span><br>').add(symbcanvas).add('<span> row '+(y+1)+' position '+seqpos+' column '+(x+1)+suppl+'</span>');
-	return {content:content, row:x, col:y, startx:x*model.boxw(), starty:y*model.boxh()}
+	if(leafnodes[name]) name = leafnodes[name].displayname||name;
+	var content = $('<span style="color:orange">'+name+'</span><br>').add(symbcanvas).add('<span> row '+(y+1)+' position '+seqpos+' column '+(x+1)+suppl+'</span>');
+	return {content:content, row:x, col:y, startx:x*model.boxw(), starty:y*model.boxh(), width:model.boxw(), height:model.boxh()}
 }
 
 function hidecolumns(e,id){
@@ -1717,61 +1804,59 @@ function hidecolumns(e,id){
 	redraw();
 }
 
-function togglerows(e,id,action){ //show/hide seq. rows & tree leafs
+function hiderows(e,id){ //hide seq. rows from seq. area
 	if(e){ e.stopPropagation(); hidetooltip(); }
-	var idarr = [];
-	if(action=='selection'){//hide selected rows
-		action = 'hide';
-		registerselections(id);
-		for(var r=0;r<rowflags.length;r++){ if(rowflags[r]){ idarr.push(visiblerows()[r]); } } 
-	}//else: hide/show from tree
-	if(typeof(idarr) != 'object'){ idarr = [idarr]; }
-	for(var i=0;i<idarr.length;i++){ leafnodes[idarr[i]].hideToggle(action); }
+	var namearr = [];
+	action = 'hide';
+	registerselections(id);
+	for(var r=0;r<rowflags.length;r++){ if(rowflags[r]){ namearr.push(visiblerows()[r]); }}
+	$.each(namearr,function(n,name){ leafnodes[name].hideToggle('hide'); });
 	refresh();
 }
 
-function maskdata(e,id,action){ //mask a sequence region
+function maskdata(e,action,id){ //mask a sequence region
 	if(e){ e.stopPropagation(); hidetooltip(); }
-	if(action.indexOf('unmask')!=-1){ var symboltype = 'unmasked'; var flag = false; }
-	else{ var symboltype = 'masked'; var flag = 1; }
+	var target = ~action.indexOf('rows')? 'rows' : ~action.indexOf('columns')? 'columns' : 'selection';
+	if(~action.indexOf('unmask')){ var symboltype = 'unmasked'; var flag = false; } else { var symboltype = 'masked'; var flag = 1; }
 	registerselections(id);
-	if(action.indexOf('all')!=-1){ for(var id in sequences){ for(var c=0;c<sequences[id].length;c++) sequences[id][c] = symbols[sequences[id][c]][symboltype]; } }
-	else if(action=='maskcols'||action=='unmaskcols'){	
-		for(var c=0;c<colflags.length;c++){
-			if(colflags[c]){
-				var colid = visiblecols()[c];
-				for(var id in sequences){ if(visiblerows.indexOf(id)!=-1){ sequences[id][colid] = symbols[sequences[id][colid]][symboltype]; }}
-				maskedcols[colid] = flag;
-			}
-		}
-	}
-	else if(action=='maskrows'||action=='unmaskrows'){
-		for(var r=0;r<rowflags.length;r++){
-			if(rowflags[r]){
-				var id = visiblerows()[r];
-				for(var i=0;i<sequences[id].length;i++){ sequences[id][i] = symbols[sequences[id][i]][symboltype]; }
-			}
-		}
-	}
-	else if(action=='maskselection'||action=='unmaskselection'){
-		for(var s=0;s<selections.length;s++){
-			var sel = selections[s];
-			for(var c=sel.colstart;c<=sel.colend;c++){
-				var colid = visiblecols()[c];
-				for(var r=sel.rowstart;r<sel.rowend;r++){
-					var id = visiblerows()[r];
-					sequences[id][colid] = symbols[sequences[id][colid]][symboltype];
-				}
-				if(!flag){ maskedcols[colid] = false; }
-			}
-		}
-	}
+	
+	if(~action.indexOf('all')){ for(var name in sequences){ for(var c=0;c<sequences[name].length;c++) sequences[name][c] = symbols[sequences[name][c]][symboltype]; }}
 	else if(action=='hidemaskedcols'){
 		for(var c=0;c<maskedcols.length;c++){ 
 			if(maskedcols[c]){
 				var colind = visiblecols.indexOf(c);
 				if(colind != -1){ visiblecols.splice(colind,1); }
 			} 
+		}
+	}
+	else if(target=='columns'){	
+		for(var c=0;c<colflags.length;c++){
+			if(colflags[c]){
+				var colid = visiblecols()[c];
+				for(var name in sequences){ if(~visiblerows.indexOf(name)){ sequences[name][colid] = symbols[sequences[name][colid]][symboltype]; }}
+				maskedcols[colid] = flag;
+			}
+		}
+	}
+	else if(target=='rows'){
+		for(var r=0;r<rowflags.length;r++){
+			if(rowflags[r]){
+				var name = visiblerows()[r];
+				for(var c=0;c<sequences[name].length;c++){ sequences[name][c] = symbols[sequences[name][c]][symboltype]; }
+			}
+		}
+	}
+	else if(target=='selection'){
+		for(var s=0;s<selections.length;s++){
+			var sel = selections[s];
+			for(var c=sel.colstart;c<=sel.colend;c++){
+				var colid = visiblecols()[c];
+				for(var r=sel.rowstart;r<sel.rowend;r++){
+					var name = visiblerows()[r];
+					sequences[name][colid] = symbols[sequences[name][colid]][symboltype];
+				}
+				if(!flag){ maskedcols[colid] = false; }
+			}
 		}
 	}
 	redraw();
@@ -1967,32 +2052,30 @@ function dialog(type,options){
 	else if(type=='info'){
 		if($("#infowindow").length>0){ $("#infowindow").trigger('mousedown');  return; } //bring window to front
 		var list = '<ul>'+
-		'<li data-bind="if:treesource">Number of nodes: <span data-bind="text:nodecount"></span></li>'+
-		'<li data-bind="if:treesource">Number of leafs: <span data-bind="text:leafcount"></span></li>'+
-		'<li>Number of sequences: <span data-bind="text:totalseqcount"></span>, in total of <span data-bind="html:seqdatasize"></span> '+
-		'<span data-bind="if:seqtype()==\'residues\',text:seqtype"></span></li>'+
-		+'<li>Sequence length: <span data-bind="text:minseqlength"></span> to <span data-bind="text:maxseqlength"></span> '+
-		'<span data-bind="if:seqtype()==\'residues\',text:seqtype"></span></li>'+
+		'<li data-bind="visible:treesource">Number of nodes: <span data-bind="text:nodecount"></span></li>'+
+		'<li data-bind="visible:treesource">Number of leafs: <span data-bind="text:leafcount"></span></li>'+
+		'<li>Number of sequences: <span data-bind="text:totalseqcount"></span>, in total of <span data-bind="text:seqdatasize"></span> '+
+		'<span data-bind="visible:seqtype()==\'residues\',text:seqtype"></span></li>'+
+		'<li>Sequence length: <span data-bind="text:minseqlength"></span> to <span data-bind="text:maxseqlength"></span> '+
+		'<span data-bind="visible:seqtype()==\'residues\',text:seqtype"></span></li>'+
 		'<li>Sequence matrix length: <span data-bind="text:alignlength"></span> columns '+
-		'<span data-bind="if:hiddenlen,text:\'(\'+hiddenlen()+\'columns hidden)\'"></span></li>'+
+		'<span data-bind="visible:hiddenlen,text:\'(\'+hiddenlen()+\' columns hidden)\'"></span></li>'+
 		'<li>Sequence matrix height: <span data-bind="text:alignheight"></span> rows</li>'+
-		'<li data-bind="if:sourcetype">Data source: <span data-bind="text:sourcetype"></span></li>'+
-		'<li data-bind="if:treesource">Tree file: <span data-bind="text:treesource"></span></li>'+
-		'<li data-bind="if:seqsource">Sequence file: <span data-bind="text:seqsource"></span></li>'+
+		'<li data-bind="visible:sourcetype">Data source: <span data-bind="text:sourcetype"></span></li>'+
+		'<li data-bind="visible:treesource()&&!ensinfo().type">Tree file: <span data-bind="text:treesource"></span></li>'+
+		'<li data-bind="visible:seqsource()&&!ensinfo().type">Sequence file: <span data-bind="text:seqsource"></span></li>'+
 		'</ul>';
-		console.log(model.ensinfo());
-		var enslist = '<div data-bind="if:ensinfo().type"><br><span style="color:#666">About Ensembl dataset:</span><br>'+
+		var enslist = '<div data-bind="if:ensinfo().type" style="margin-top:5px"><span style="color:#666">About Ensembl dataset:</span><br>'+
 		'<ul data-bind="with:ensinfo"><!-- ko if: type==\'homology\' -->'+
 		'<li>Homologs to <span data-bind="text:species"></span> gene '+
-		'<a data-bind="attr:{href:\'http://www.ensembl.org/\'+species.replace(\' \',\'_\')+\'/Gene/Summary?g=\'+id,target:\'_blank\'},text:id"></a></li>'+
+		'<a data-bind="attr:{href:\'http://www.ensembl.org/\'+species.replace(\' \',\'_\')+\'/Gene/Summary?g=\'+id,target:\'_blank\',title:\'View in Ensembl\'},text:id"></a></li>'+
 		'<!-- /ko --><!-- ko if: type==\'genetree\' -->'+
-		'<li>Genetree <a data-bind="attr:{href:\'http://www.ensembl.org/Multi/GeneTree?gt=\'+id,target:\'_blank\'},text:id"></a></li>'+
+		'<li>Genetree <a data-bind="attr:{href:\'http://www.ensembl.org/Multi/GeneTree?gt=\'+id,target:\'_blank\',title:\'View in Ensembl\'},text:id"></a></li>'+
 		'<!-- /ko --></ul></div>';
 		var dialogdiv = makewindow("Data information",[list,enslist],{btn:'OK',icn:'info.png',id:'infowindow'});
 		ko.applyBindings(model,dialogdiv[0]);
 	}
 	else if(type=='align'){
-		//var expbtn = $('<img src="img/plus.png" class="icn optadd">');
 		var expbtn = $('<span class="rotateable">&#x25BA;</span>');
 		expbtn.click(function(e){
 			e.stopPropagation(); self = $(this);
@@ -2006,13 +2089,13 @@ function dialog(type,options){
 		var namespan = $('<span class="note">Descriptive name: </span>').append(nameinput);
 		var opttitle = $('<div>').append(expbtn,opttitlespan,infospan);
 		var optdiv = $('<div class="insidediv" style="display:none">');
-		var treecheck = model.treesource()?'':'checked="checked"';
+		var treecheck = $.isEmptyObject(treesvg)?'checked="" disabled=""':''; //new tree needed
 		var parentoption = model.parentid()?'<option value="sibling" checked="checked">branch parent</option>':'';
 		var writetarget = model.currentid()?'Aligned data will <select name="writemode">'+parentoption+
 		'<option value="child" '+(model.parentid()?'':'checked="checked"')+'>branch current</option>'+
 		'<option value="overwrite">overwrite current</option></select> analysis files in the <a onclick="dialog(\'library\'); return false">library</a>.<br><br>':'';
 		var optform = $('<form id="alignoptform" onsubmit="return false">'+writetarget+
-		'<input type="checkbox" name="newtree" data-bind="enable:treesource" '+treecheck+'><span class="label" title="Checking this option builds a new guidetree for the sequence alignment process (otherwise uses the current tree).">make new tree</span>'+
+		'<input type="checkbox" name="newtree" '+treecheck+'><span class="label" title="Checking this option builds a new guidetree for the sequence alignment process (otherwise uses the current tree).">make new tree</span>'+
 		'<br><input type="checkbox" checked="checked" name="anchor"><span class="label" title="Use Exonerate anchoring to speed up alignment">alignment anchoring</span> '+
 		'<br><input type="checkbox" name="e"><span class="label" title="Checking this option keeps current alignment intact (pre-aligned sequences) and only adds sequences for ancestral nodes.">keep current alignment</span>'+
 		'<br><br><div class="sectiontitle"><span>Model parameters</span></div>'+
@@ -2030,7 +2113,8 @@ function dialog(type,options){
 	else if(type=='jobstatus'){
 		communicate('alignstatus','','jobdata'); //refresh data
 		if($("#jobstatus").length>0){ $("#jobstatus").trigger('mousedown');  return; } //bring window to front
-		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. You can realign the sequence or revert the tree modifications.<br><a class="button square red" onclick="model.selectundo(\'firsttree\'); model.undo(); return false;">Revert</a>';
+		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. Please realign the sequence'+
+		(model.treesnapshot? ' or revert the tree modifications.<br><a class="button square red" data-bind="visible:treesnapshot" onclick="model.selectundo(\'firsttree\'); model.undo(); return false;">Revert</a>' : '.');
 		var notediv = $('<div class="sectiontitle" data-bind="visible:treealtered"><img src="img/info.png"><span>Notifications</span></div><div data-bind="visible:treealtered" class="sectiontxt">'+treenote+'</div>');
 		var realignbtn = $('<a class="button square">Realign</a>');
 		var optform = model.currentid()? $('<form id="realignoptform" onsubmit="return false">The realignment will <select name="writemode">'+
@@ -2039,7 +2123,7 @@ function dialog(type,options){
 		'<option value="overwrite">overwrite current</option></select> analysis files in the <a onclick="dialog(\'library\'); return false;">library</a>.</form>') : [''];
 		notediv.last().append(realignbtn,optform);
 		realignbtn.click(function(){ sendjob({form:optform[0],btn:realignbtn,name:'Realignment',realign:true}) });
-		var jobslistdiv = '<div class="sectiontitle" data-bind="visible:sortedjobs().length>0"><img src="img/run.png"><span>Status of background alignment jobs</span></div><div class="insidediv" data-bind="visible:sortedjobs().length>0,foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>';
+		var jobslistdiv = '<div class="sectiontitle" data-bind="visible:sortedjobs().length>0"><img src="img/run.png"><span>Status of background tasks</span></div><div class="insidediv" data-bind="visible:sortedjobs().length>0,foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>';
 		var statuswindowdiv = makewindow("Status overview",[notediv,jobslistdiv],{id:"jobstatus",icn:'gear.png'});
 		ko.applyBindings(model,statuswindowdiv[0]);
 	}
@@ -2096,21 +2180,26 @@ function sendjob(options){
 	if(!$.isEmptyObject(nodeinfo)) senddata.nodeinfo = nodeinfo;
 	if(!$.isEmptyObject(model.ensinfo())) senddata.ensinfo = model.ensinfo();
 	
-	optdata.func = function(data){ //job sent to server. Show status.
+	optdata.success = function(data){ //job sent to server. Show status.
 		alignbtn.html('Done');
-		setTimeout(function(){ communicate('alignstatus','','jobdata'); if(options.realign) model.treealtered(false); }, 600);
+		communicate('alignstatus','','jobdata');
+		setTimeout(function(){
+			if(options.realign) model.treealtered(false);
+			if(optdiv) alignbtn.closest("div.popupwindow").find("img.closebtn").click(); //close alignment setup winow
+		}, 600);
 	}
-	communicate('startalign',senddata,optdata);
+	var ajaxobj = communicate('startalign',senddata,optdata);
 	setTimeout(function(){
-		if(optdiv) alignbtn.closest("div.popupwindow").find("img.closebtn").click(); //close alignment setup winow
-	},3000);
-	return false; //for onClick event
+		if(ajaxobj.readyState<4){ //close hanging request
+			communicate('alignstatus','','jobdata');
+			if(optdiv) alignbtn.closest("div.popupwindow").find("img.closebtn").click();
+			ajaxobj.abort();
+	}},2000);
+	return false; //for onclick
 }
 
 //get sorted items from serverdata
 function sortdata(data,key){
-	if(!data) data = 'jobdata';
-	if(!key) key = 'starttime';
 	var itemsarray = typeof(data)=='string'? serverdata[data]() : data;
 	itemsarray.sort(function(a,b){ return a[key]&&b[key]? a[key]()>b[key]()?1:-1 : 0; });
 	return itemsarray;
@@ -2138,7 +2227,7 @@ function ensemblimport(){
 			return false;
 		}
 		
-		try{ ensdata = JSON.parse(ensdata); } catch(e){ if(ensdata.indexOf('BaseHTTP')!=-1) ensdata = {error:'No response. Check network connectivity.'}; }
+		try{ ensdata = JSON.parse(ensdata); } catch(e){ if(~ensdata.indexOf('BaseHTTP')) ensdata = {error:'No response. Check network connectivity.'}; }
 		if(typeof(ensdata)=='object'){ //JSON => server error or gene homology data
 			if(!ensdata.data){
 				if(!ensdata.error) ensdata = {error:'Data is in unexpected format. Try other options.'};
@@ -2154,7 +2243,7 @@ function ensemblimport(){
 			xmlstr = $(xmlstr).text().replace(/\s*\n\s*/g,'');
 			filescontent[ensid+'.xml'] = xmlstr;
 		}
-		parseimport({source:'Ensembl',importbtn:$(ensbtn),ensinfo:{type:idformat,id:ensid}});
+		setTimeout(function(){ parseimport({source:'Ensembl',importbtn:$(ensbtn),ensinfo:{type:idformat,id:ensid}}) },100);
 	}
 	//reqest data, then process it
 	communicate('geturl',{fileurl:urlstring},{success:processdata,btn:ensbtn,retry:true});
@@ -2167,12 +2256,12 @@ function ensemblid(ensdata){
 	if(!ensdata){ //send request
 		if(!ensemblmodel.idspecies()||!ensemblmodel.idname()) return;
 		var urlstring = ('http://beta.rest.ensembl.org/xrefs/symbol/'+ensemblmodel.idspecies()+'/'+ensemblmodel.idname()+'?content-type=application/json;object=gene').replace(/ /g,'+');
-		communicate('geturl',{fileurl:urlstring},{success:function(data){ensemblid(data)},btn:ensbtn,retry:true});
+		communicate('geturl',{fileurl:urlstring},{success:function(data){ensemblid(data)},btn:ensbtn,retry:true,restore:true});
 		return false;
 	}
 	//process data
 	try{ ensdata = JSON.parse(ensdata); } catch(e){
-		if(ensdata.indexOf('BaseHTTP')!=-1) ensdata = {error:'No response. Check network connectivity.'};
+		if(~ensdata.indexOf('BaseHTTP')) ensdata = {error:'No response. Check network connectivity.'};
 		else ensdata = {error:'No match. Try different search.'};
 	}
 	if($.isArray(ensdata) && !ensdata.length) ensdata = {error:'No match. Try different search.'};
@@ -2209,7 +2298,7 @@ function checkfiles(filearr,action){
 		var ext = file.name.substr(file.name.lastIndexOf('.'));
 		var accepted = false
 		$.each(acceptedtypes,function(j,goodext){ //check if filetype accepted
-			if(ext.indexOf(goodext)!=-1){
+			if(~ext.indexOf(goodext)){
 				if(!filetypes[goodext]){
 		 			filetypes[goodext] = [i]; //mark the first position of the filetype
 					filearr[i].error = 'OK';
@@ -2262,7 +2351,7 @@ function checkfiles(filearr,action){
         				filescontent[file.name] = (data);
         				if(Object.keys(filescontent).length==goodfilecount){//all files have been read in. Go parse.
         					ajaxcalls = [];
-        					parseimport({importbtn:importbtn,source:action});
+        					setTimeout(function(){ parseimport({importbtn:importbtn,source:action}) },100);
         				}
         			};
         			var senddata = action=='upload'? {upfile:file} : {fileurl:file.url};
@@ -2274,7 +2363,7 @@ function checkfiles(filearr,action){
     				reader.onload = function(evt){
     					filescontent[file.name] = evt.target.result;
     					$('#import .back li.file span.icon:eq('+i+')').empty().append(tickimg);
-    					if(Object.keys(filescontent).length==goodfilecount) parseimport({importbtn:importbtn,source:action});
+    					if(Object.keys(filescontent).length==goodfilecount) setTimeout(function(){ parseimport({importbtn:importbtn,source:action}) },100);
     				};  
     				reader.readAsText(file);
     		  	}
@@ -2309,7 +2398,7 @@ function getfile(filepath,importbtn,jobid){
     	dataType: "text",
     	success: function(data){
     		filescontent[filepath.substr(filepath.lastIndexOf('/')+1)] = data;
-        	parseimport({source:'import',id:jobid,importbtn:importbtn});
+        	setTimeout(function(){ parseimport({source:'import',id:jobid,importbtn:importbtn}) }, 100)
     	},
     	error: function(xhrobj,status,msg){ 
         	if(!msg && status!="abort"){ //no response. try again
@@ -2320,7 +2409,7 @@ function getfile(filepath,importbtn,jobid){
         }
 	  });
 	}
-	communicate('getimportmeta',{id:jobid},{success:filefunc,saveto:'importdata'}); //first get metadata, then the file
+	communicate('getimportmeta',{id:jobid},{success:filefunc,saveto:'importdata'}); //get metadata, then importfile
 }
 
 //sequence row highlight
@@ -2340,7 +2429,7 @@ function rowborder(data,hiding){
 
 /* Initiation on page load */
 $(function(){
-	dom = { seqwindow:$("#seqwindow"),seq:$("#seq"),wrap:$("#wrap"),treewrap:$("#treewrap"),tree:$("#tree"),names:$("#names") }; //glob.ref. to dom elements
+	dom = { seqwindow:$("#seqwindow"),seq:$("#seq"),wrap:$("#wrap"),treewrap:$("#treewrap"),tree:$("#tree"),names:$("#names") }; //global ref. of dom elements
 	ko.applyBindings(model);
 	
 	$("#zoombtns").hover(function(){$("#zoomperc").fadeIn()},function(){$("#zoomperc").fadeOut()});
@@ -2379,21 +2468,21 @@ $(function(){
 	
 	//Add mouse click/move listeners to sequence window
 	dom.seqwindow.mousedown(function(e){
-	 e.preventDefault();//disable image drag etc.
+	 e.preventDefault(); //disable image drag etc.
 	 var startpos = {x:e.pageX,y:e.pageY};
-	 if(e.pageY>dom.seqwindow.offset().top+30){//in seq area
-	  if(e.which==1 && e.target.tagName!='DIV'){//act on left mouse button, outside of selections
+	 if(e.pageY>dom.seqwindow.offset().top+30){ //in seq area
+	  if(e.which==1 && e.target.tagName!='DIV'){ //act on left mouse button, outside of selections
 		var curid = lastselectionid;
 		dom.seqwindow.mousemove(function(evt){ selectionsize(evt,curid,startpos); });
 		dom.seqwindow.mouseup(function(e){
-	 		if(e.pageY>dom.seqwindow.offset().top+30){//in seq area
+	 		if(e.pageY>dom.seqwindow.offset().top+30){ //in seq area
 	  			if(e.which==1 && e.target.tagName!='DIV' && $("div.canvasmenu").length==0){ //outside of selections
 	  				var dx = e.pageX-startpos.x; var dy = e.pageY-startpos.y; 
-	  				if(Math.sqrt(dx*dx+dy*dy)<10){ //no drag: infobubble
+	  				if(Math.sqrt(dx*dx+dy*dy)<10){ //no drag => higligh row and show position info
 	  					var sdata = seqinfo(e);
-	  					var arrtype = e.pageY-dom.seqwindow.offset().top>dom.seqwindow.innerHeight()-90? 'bottom' : 'top';
+	  					var arrowtype = e.pageY-dom.seqwindow.offset().top > dom.seqwindow.innerHeight()-90? 'bottom' : 'top';
 	  					rowborder(sdata);
-	  					tooltip(e,sdata.content,{container:"#seq",arrow:arrtype,target:sdata});
+	  					tooltip(e,sdata.content,{container:"#seq",arrow:arrowtype,target:sdata});
 	  				}
 	  			}
 	 		}
@@ -2405,89 +2494,70 @@ $(function(){
 	
 	$("html").mouseup(function(){ dom.seqwindow.unbind('mousemove'); });
 	
-	dom.seqwindow.bind('contextmenu',function(e){//right click
-		e.preventDefault();//disable right-click menu
+	var icon = function(type,title){
+		title = title? 'title="'+title+'"' : '';
+		return '<span class="svgicon" '+title+'>'+svgicon(type)+'</span>';
+	}
+	
+	dom.seqwindow.bind('contextmenu',function(e){ //sequence area right click (pop-up menu)
+		e.preventDefault(); //disable default right-click menu
 		hidetooltip();
-		var maskcount = 0;
+		var maskcount = 0, data = {};
 		for(var c=0;c<maskedcols.length;c++){ if(maskedcols[c]){ maskcount++; } }
-		if($('div[id^="selection"]').length==0){//no selections made
-			var menudata = {
-				'Mask all sequences' : {'click':function(){ maskdata(false,false,'maskall') },
-	  				'submenu':{ 'Unamask all sequences': function(){ maskdata(false,false,'unmaskall') }}}
-			};
-			var hrowsmenu = { 'Reveal all hidden rows' : function(){console.log('reveal all rows')}};
-			if(model.hiddenlen()>0){ menudata['Reveal '+model.hiddenlen()+' columns'] = {'click':function(){ console.log('uncollapse columns') },'submenu':hrowsmenu }; }
-			else menudata['Reveal all hidden rows'] = hrowsmenu['Reveal all hidden rows'];
-			if(maskcount>0) menudata['Collapse '+maskcount+' masked columns'] = function(){ maskdata(e,false,'hidemaskedcols') };
-			tooltip(e,'',{data:menudata});
-		}
-		else {
-	  	  var data = {};
-	  	  var mode = model.selmode();
-	  	  var over = e.target.id=='' ? e.target.parentNode : e.target;	
-	  	  activeid = over.id.indexOf('selection')!=-1||over.id.indexOf('cross')!=-1 ? over.id.substr(9) : false;
-	  	  var curactiveid = activeid;
-	  	  
-	  	  if(mode=='default'||mode=='columns'){//construct right-click dropmenus for sequence area
-	  		data['\u25A5 Mask columns'] = { 'click':function(){ maskdata(false,false,'maskcols') }, 'submenu':{} };
-	  		if(activeid){ 
-	  			data['\u25A5 Mask columns']['submenu']['<span style="color:orange" title="Mask alignment columns under active (orange-bordered) selection area.">\u25A5</span> Mask these columns'] = { 'click' : function(e){ maskdata(e,curactiveid,'maskcols') } };
-	  			data['\u25A5 Mask columns']['submenu']['<span style="color:orange" title="Unmask alignment columns under active (orange-bordered) selection area.">\u25A5</span> Unmask these columns'] = { 'click' : function(e){ maskdata(e,curactiveid,'unmaskcols') },
-	  			'submenu':  {'\u25A5 Unmask columns':{ 'click':function(e){ maskdata(e,false,'unmaskcols') } } } };
-				data['\u25A5 Mask columns']['submenu']['<span style="color:orange" title="Collapse alignment columns under active (orange-bordered) selection area.">\u2226</span> Hide these columns'] = { 'click' : function(e){ hidecolumns(e,curactiveid) },
-				'submenu': {'\u2226 Hide columns':{ 'click':function(e){ hidecolumns(e) } } } };
-				if(maskcount!=0){ 
-					data['\u25A5 Mask columns']['submenu']['<span style="color:orange" title="Collapse alignment columns under active (orange-bordered) selection area.">\u2226</span> Hide these columns']['submenu']['<span title="Collapse '+maskcount+' masked columns.">\u2226</span> Hide masked columns'] = { 'click' : function(e){ maskdata(e,false,'hidemaskedcols') }};
-				}
-			}else{
-				data['\u25A5 Mask columns']['submenu']['\u25A5 Unmask columns'] = { 'click' : function(e){ maskdata(e,false,'unmaskcols') } };
-				data['\u25A5 Mask columns']['submenu']['\u2226 Hide columns'] = { 'click' : function(e){ hidecolumns(e) } };
-				if(maskcount!=0){ 
-					data['\u25A5 Mask columns']['submenu']['<span title="Collapse '+maskcount+' masked columns.">\u2226</span> Hide masked columns'] = { 'click' : function(e){ maskdata(e,false,'hidemaskedcols') }};
-				}
-			}
-	  	  }
-	  	  
-	  	  if(mode=='default'||mode=='rows'){		
-	  		data['\u25A4 Mask rows'] = { 'click':function(){ maskdata(false,false,'maskrows') }, 'submenu':{} };
-	  		if(activeid){ 
-	  			data['\u25A4 Mask rows']['submenu']['<span style="color:orange" title="Mask sequence rows under active (orange-bordered) selection area.">\u25A4</span> Mask these rows'] = { 'click':function(e){ maskdata(e,curactiveid,'maskrows') } };
-	  			data['\u25A4 Mask rows']['submenu']['<span style="color:orange" title="Unmask sequence rows under active (orange-bordered) selection area.">\u25A4</span> Unmask these rows'] = { 'click':function(e){ maskdata(e,curactiveid,'unmaskrows') }, 
-	  			'submenu': {'\u25A4 Unmask rows':{ 'click':function(e){ maskdata(e,false,'unmaskrows') } } } }; 
-	  			if(model.treesource()){ data['\u25A4 Mask rows']['submenu']['<span style="color:orange" title="Collapse sequence rows under active (orange-bordered) selection area.">\u2262</span> Hide these rows'] = { 'click':function(e){ togglerows(e,curactiveid,'selection'); }, 
-	  			'submenu': {'\u2262 Hide rows':{ 'click':function(e){ togglerows(e,false,'selection'); } } } }; }//if has tree
-	  		}else{
-	  			data['\u25A4 Mask rows']['submenu']['\u25A4 Unmask rows'] = { 'click':function(e){ maskdata(e,false,'unmaskrows') } };
-	  			if(model.treesource()){ data['\u25A4 Mask rows']['submenu']['\u2262 Hide rows'] = { 'click':function(e){ togglerows(e,false,'selection'); } }; }//if has tree
-	  		}
-	  	  }
-	  			
-	  	  if(mode=='default'){ 
-	  		data['\u25A5 Mask columns']['mouseover'] = function(){ toggleselection('show columns') };
-	  		data['\u25A4 Mask rows']['mouseover'] = function(){ toggleselection('show rows') }; 
-	  		data['\u25A5 Mask columns']['mouseout'] = function(){ toggleselection('hide columns') };
-	  		data['\u25A4 Mask rows']['mouseout'] = function(){ toggleselection('hide rows') };
-	  	  }
-		  
-	  	  if(activeid){//right-click on selection
-	  	  	$("#seq div[class^='selection']").css({'border-color':'','color':''});
+		var mode = model.selmode();
+	  	var over = e.target.id=='' ? e.target.parentNode : e.target;	
+	  	activeid = ~over.id.indexOf('selection')||~over.id.indexOf('cross') ? over.id.substr(9) : false;
+	  	var curactiveid = activeid;
+		var selectcount = $('div[id^="selection"]').length;
+		
+		if(activeid){ //right-click on selection
+			$("#seq div[class^='selection']").css({'border-color':'','color':''});
 	  		$('#selection'+activeid+',#vertcross'+activeid+',#horicross'+activeid).css({'border-color':'orange','color':'orange'});
-	  		if(over.id.indexOf('selection')!=-1){
-	  			data['<span style="color:orange">\u25A6</span> Mask selection area'] = { 'click':function(){ maskdata(false,activeid,'maskselection') },
-	  				'submenu':{ '<span style="color:orange">\u25FB</span> Unmask selection area':{ 'click':function(e){ maskdata(e,activeid,'unmaskselection') } }, 
-	  						    '\u259A Mask all selections':{ 'click':function(e){ maskdata(e,false,'maskselection') } }}
-	  			};
-	  		} else { data['\u259A Mask all selections'] = function(){ maskdata(false,false,'maskselection') }}
-	  		data['<span style="color:orange">\u2327</span> Clear this selection'] = {'click':function(){ clearselection(activeid); },
-	  			'submenu':{ '\u2573 Clear all selections':{ 'click':function(e){ e.stopPropagation(); hidetooltip(); clearselection(); } }}
-	  		};
-	  	  } else {
-	  	  	data['\u259A Mask all selections'] = function(){ maskdata(false,false,'maskselection') }; 
-	  	  	data['\u2573 Clear all selections'] = function(){ clearselection(); }; 
-	  	  }
-	  	  tooltip(e,'',{data:data});
-	   }
-	});
+	  		
+	  		var target = mode=='default'? 'selection area' : mode;
+	  		var maskmenu = data[icon('mask')+' Mask '+target] = {click:function(e){maskdata(e,'mask'+target,activeid)}, submenu:{}};
+	  		maskmenu['submenu'][icon('unmask')+' Unmask '+target] = function(e){maskdata(e,'unmask'+target,activeid)};
+	  		if(selectcount>1){
+	  			maskmenu['submenu'][icon('mask')+' Mask all '+selectcount+' selections'] = function(e){maskdata(e,'mask'+target)};
+	  			maskmenu['submenu'][icon('unmask')+' Unmask all '+selectcount+' selections'] = function(e){maskdata(e,'unmask'+target)};
+	  		}
+			
+			if(mode!='rows'){
+				var hidecolmenu = data[icon('collapse')+' Collapse columns'] = {click:function(e){hidecolumns(e,curactiveid)}, submenu:{}};
+				if(selectcount>1) var hidecolsubmenu = hidecolmenu['submenu'][icon('collapse')+' Collapse all selected columns'] = {click:function(e){hidecolumns(e)}};
+			}
+			if(mode!='columns' && model.treesource()){
+				var hiderowmenu = data[icon('collapse')+' Collapse rows'] = {click:function(e){hiderows(e,curactiveid)}, submenu:{}};
+				if(selectcount>1) var hiderowsubmenu = hiderowmenu['submenu'][icon('collapse')+' Collapse all selected rows'] = {click:function(e){hiderows(e)}};
+			}
+			
+			var clearmenu = data[icon('selection')+' Clear selection'] = {'click':function(){clearselection(activeid)}, submenu:{}};
+	  		if(selectcount>1) clearmenu['submenu'][icon('selections')+' Clear all selections'] = function(e){e.stopPropagation(); hidetooltip(); clearselection()};
+	  		
+	  		if(mode=='default'){ //preview row/columnselections
+	  			hidecolmenu.mouseover = function(){toggleselection('show columns',activeid)};
+	  			hidecolmenu.mouseout = function(){toggleselection('hide columns',activeid)};
+	  			if(selectcount>1){
+	  				hidecolsubmenu.mouseover = function(){toggleselection('show columns')};
+	  				hidecolsubmenu.mouseout = function(){toggleselection('hide columns','',activeid)};
+	  			}
+	  			if(model.treesource()){
+	  				hiderowmenu.mouseover = function(){toggleselection('show rows',activeid)}; 
+	  				hiderowmenu.mouseout = function(){toggleselection('hide rows',activeid)};
+	  				if(selectcount>1){
+	  					hiderowsubmenu.mouseover = function(){toggleselection('show rows')};
+	  					hiderowsubmenu.mouseout = function(){toggleselection('hide rows','',activeid)};
+	  				}
+	  			}
+	  	  	}	
+		}else{ //right-click outside of selection
+			var maskmenu = data[icon('mask')+' Mask all sequences'] = {click:function(e){maskdata(e,'maskall')},submenu:{}};
+	  		maskmenu['submenu'][icon('unmask')+' Unmask all sequences'] = function(e){maskdata(e,'unmaskall')};
+			if(model.hiddenlen()) data[icon('expand')+' Reveal '+model.hiddenlen()+' hidden columns'] = function(e){hidecolumns(e,'revealall')};
+			if(maskcount) data[icon('collapse')+' Collapse '+maskcount+' masked columns'] = function(e){maskdata(e,'hidemaskedcols')};
+		}
+	   	tooltip(e,'',{data:data}); //show menu
+	}); //seq. area right-click
 		
 	$.ajax({ //get initial datafile
 		type: "GET",
