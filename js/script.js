@@ -1,14 +1,12 @@
 /*
-Master script for Wasabi web app (visualisation and analysis of multiple sequence alignment data). 
+Main script for Wasabi web app (for visualisation and analysis of multiple sequence alignment data). 
 Andres Veidenberg 2011 (andres.veidenberg@helsinki.fi)
 */
 
-//var start,now,end = new Date().getTime();
-
-var sequences = {};
-var treesvg = {};
-var leafnodes = {};
-var colstep = 200;
+var sequences = {}; //seq. data {name : [s,e,q]}
+var treesvg = {}; //phylogenetic nodetree
+var leafnodes = {}; //all leafnodes+visible ancestral leafnodes
+var colstep = 200; //sequence rendering tile size
 var rowstep = 60;
 var letters = '-_.:?!*=AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz'.split('');
 var alphabet = { 'residues': ['A','R','N','D','C','Q','E','G','H','I','L','K','M','F','P','S','T','W','Y','V','B','Z','X','-','?','*'],
@@ -17,20 +15,19 @@ var colors = {};
 var symbols = {};
 var canvassymbols = {'_':'-','.':'+',':':'+','!':'?','=':'*'}; //canvas masks
 var canvaslabels = {'-':'gap','_':'gap','.':'ins.',':':'ins.','?':'unkn.','!':'unkn.','*':'stop','=':'stop'};
-var lastselectionid = 0;
 var activeid = false;
-var canvaspos = [];
-var colflags = [];
-var visiblecols = ko.observableArray();
+var canvaspos = []; //list of rendered seq. tiles
+var colflags = []; //(selection-)flagged columns
 var rowflags = [];
-var visiblerows = ko.observableArray();
 var selections = [];
-var maskedcols = [];
-var filescontent = {};
+var maskedcols = []; //array of columns masked via sequence menu
+var filescontent = {}; //temporary file data for import/export
 var filetypes = {};
 var exportedseq = '';
 var exportedtree = '';
-var jobdataopt = {
+var dom = {}; //global references to DOM elemets
+
+var jobdataopt = { //dataobject+properties for server sync
 	key: function(item){ return ko.utils.unwrapObservable(item.id); },
 	create: function(args){ return new jobmodel(args.data); }
 };
@@ -38,14 +35,8 @@ var analysdataopt = {
 	key: function(item){ return ko.utils.unwrapObservable(item.id); },
 	create: function(args){ return new analysmodel(args.data); },
 };
-var serverdata = {'jobdata':ko.mapping.fromJS([],jobdataopt),'analysdata':ko.mapping.fromJS([],analysdataopt),'importdata':ko.mapping.fromJS({})};
+var serverdata = {jobdata:ko.mapping.fromJS([],jobdataopt),analysdata:ko.mapping.fromJS([],analysdataopt),importdata:ko.mapping.fromJS({})};
 
-var is = { //browser detection
-	ff : Boolean($.browser.mozilla),
-	chrome: Boolean(window.chrome),
-	safari: Boolean($.browser.webkit && !Boolean(window.chrome))
-}
-var dom = {};
 
 function parentid(id){ //extract parent dir from a library dir
 	if(!id) return '';
@@ -53,16 +44,19 @@ function parentid(id){ //extract parent dir from a library dir
 	return ~idend? id.substring(0,idend) : '';
 }
 
-ko.observableArray.fn.sortByProperty = function(prop) {
-    this.sort(function(obj1, obj2){
-        if (obj1[prop] == obj2[prop]) return 0;
-        else if (obj1[prop] < obj2[prop]) return -1 ;
-        else return 1;
-    });
+function sortdata(data,key){ //sort serverdata object arrays
+	var itemsarray = typeof(data)=='string'? serverdata[data]() : data;
+	itemsarray.sort(function(a,b){ return a[key]&&b[key]? a[key]()>b[key]()?1:-1 : 0; });
+	return itemsarray;
+}
+
+var is = { //browser detection
+	ff : Boolean($.browser.mozilla),
+	chrome: Boolean(window.chrome),
+	safari: Boolean($.browser.webkit && !Boolean(window.chrome))
 }
 
 /* KnockOut data models to keep the state of the system */
-
 //file export settings (export window)
 var myExport = function(){
 	var self = this;
@@ -116,9 +110,63 @@ var ensemblmodel = new myEnsembl();
 //global settings
 var mySettings = function(){
 	var self = this;
+	self.toggle = function(obsvalue){ obsvalue(!obsvalue()); }
+	self.btntxt = function(obsvalue){ return obsvalue()?'ON':'OFF'; }
+	self.preflist = ['tooltipclass','undolength','autosave','autosaveint','onlaunch','colorscheme','windowanim','allanim'];
+	self.saveprefs = function(){ //store preferences to harddisk
+		$.each(self.preflist,function(p,pref){ localStorage[pref] = JSON.stringify(self[pref]()); });
+	};
+	self.loadprefs = function(){
+		$.each(self.preflist,function(p,pref){
+			if(localStorage[pref]){
+				try{ var prefval = JSON.parse(localStorage[pref]); }catch(e){}
+				if(typeof(prefval)!='undefined') self[pref](prefval);
+			}
+		});
+	};
+	self.tooltipclasses = ['white','black','beige'];
 	self.tooltipclass = ko.observable('white');
+	self.undolength = ko.observable(5);
+	self.storeundo = false;
+	self.autosave = ko.observable(false);
+	self.autosaveopt = ['modification','minute','5 minutes','15 minutes','30 minutes'];
+	self.autosaveint = ko.observable();
+	self.intervalid = 0;
+	self.autosave.subscribe(function(val){ //set up autosave
+	console.log('autosave:'+val);
+		clearInterval(self.intervalid);
+		if(val && self.autosaveint()){
+			if(exportmodel.savename()=='Saved analysis') exportmodel.savename('Autosaved session');
+			if(~self.autosaveint().indexOf('minute')){
+			console.log('setting up saveinterval');
+				var int = parseInt(self.autosaveint());
+				if(isNaN(int)) int = 1;
+				self.intervalid = setInterval(savefile,int*60000);
+			} else { console.log('setting up savesession'); savefile(); self.storeundo = true; }
+		} else self.storeundo = false;
+	});
+	self.keepid = false;
+	self.launchopt = ['blank page','import dialog','last Library item','last session'];
+	self.onlaunch = ko.observable();
+	self.onlaunch.subscribe(function(val){
+	console.log('onlaunch:'+val);
+		if(~val.indexOf('last')){
+			if(val=='last session'){
+				self.autosaveint(self.autosaveopt[0]);
+				self.autosave(true);
+			}
+			self.keepid = true;
+		} else self.keepid = false;
+	});
+	self.keepzoom = ko.observable(true);
+	self.keepzoom.subscribe(function(val){ if(val) localStorage.zoomlevel = JSON.stringify(model.zoomlevel()); });
+	self.coloropt = [{n:'Taylor',d:'Common colorscheme in alignment programs.'},{n:'rainbow',d:'Random-generated vibrant colors.'}, {n:'grayscale',d:'Random-generated grayscale tones.'},{n:'Custom',d:'Customize colors of current colorscheme.'}];
+	self.colorscheme = ko.observable(self.coloropt[0]);
+	self.allanim = ko.observable(true);
+	self.allanim.subscribe(function(val){ self.windowanim(val); });
+	self.windowanim = ko.observable(true);
 }
-var settings = new mySettings();
+var settingsmodel = new mySettings();
 
 //main datamodel
 var myModel = function(){
@@ -126,23 +174,26 @@ var myModel = function(){
 	//rendering parameters
 	self.startfile = "testdata.xml";
 	self.zoomlevel = ko.observable(10);
+	self.zoomlevel.subscribe(function(val){ if(settingsmodel.keepzoom()) localStorage.zoomlevel = JSON.stringify(val); });
 	self.zoomperc = ko.computed(function(){ var l = self.zoomlevel(); return l==2 ? 'MIN' : l==20 ? 'MAX' : l*5+'%'; });
 	self.boxw = ko.computed(function(){ return parseInt(self.zoomlevel()*1.5); });
 	self.boxh = ko.computed(function(){ return parseInt(self.zoomlevel()*2); });
 	self.fontsize = ko.computed(function(){ return parseInt(self.zoomlevel()*1.8); });
-	self.nameswidth = ko.observable(50);
-	self.namesw = ko.computed(function(){ return self.nameswidth()+'px'; });
 	self.dendogram = ko.observable(false);
 	//button states
 	self.selmodes = ['default','columns','rows'];
 	self.selmode = ko.observable(self.selmodes[0]);
 	self.setmode = function(mode){ self.selmode(mode); togglemenu('selectmodemenu','hide'); toggleselection(mode); };
 	self.filemenu = ['library','import','export','save','info'];
-	self.fileclick = function(data){ dialog(data); togglemenu('filemenu','hide'); };
-	self.runmenu = [{n:'Make alignment',c:'align'}];
-	self.runclick = function(data){ dialog(data.c); togglemenu('runmenu','hide'); };
+	self.runmenu = [{txt:'Align seq.',act:'align',icn:'icon',inf:'(Re)align current sequence data'}];
+	self.toolsmenu = [{txt:'Hide gaps',act:'seqtool',icn:'seq',inf:'Collapse sequence columns'},
+		{txt:'Prune tree',act:'treetool',icn:'tree',inf:'Prune/hide tree leafs'},
+		{txt:'Preferences',act:'settings',icn:'settings',inf:'General preferences'}];
+	self.menuclick = function(menu,action){ dialog(action); togglemenu(menu,'hide'); };
 	//current data
 	self.currentid = ko.observable('');
+	self.visiblecols = ko.observableArray();
+	self.visiblerows = ko.observableArray();
 	self.parentid = ko.computed(function(){ return parentid(self.currentid()) });
 	self.parentid.subscribe(function(pid){ //id=>change save options
 		if(self.currentid()){
@@ -175,12 +226,12 @@ var myModel = function(){
 	self.minseqlength = ko.computed(function(){ return numbertosize(self.minseqlen(),self.seqtype()) });
 	self.alignlen = ko.observable(0);
 	self.alignlength = ko.computed(function(){ return numbertosize(self.alignlen()) });
-	self.alignheight = ko.computed(function(){ return visiblerows().length }).extend({throttle: 100});
+	self.alignheight = ko.computed(function(){ return self.visiblerows().length }).extend({throttle: 100});
 	self.totalseqcount = ko.observable(0);
 	self.seqdatasize = ko.computed(function(){ return numbertosize(self.alignlen()*self.totalseqcount(),self.seqtype()) });
 	self.leafcount = ko.observable(0);
 	self.nodecount = ko.observable(0);
-	self.hiddenlen = ko.computed(function(){ return self.alignlen()-visiblecols().length; }).extend({throttle: 100});
+	self.hiddenlen = ko.computed(function(){ return self.alignlen()-self.visiblecols().length; }).extend({throttle: 100});
 	self.hiddenlength = ko.computed(function(){ return numbertosize(self.hiddenlen(),self.seqtype()) });
 	self.treesource = ko.observable('');
 	self.seqsource = ko.observable('');
@@ -190,51 +241,48 @@ var myModel = function(){
 	self.gaprate = ko.observable(0.005);
 	self.gapext = ko.observable(0.5);
 	//alignment jobs tracking (status window)
-	self.sortjobsby = ko.observable('starttime');
-	self.sortedjobs = ko.computed(function(){ return sortdata('jobdata',self.sortjobsby()); }).extend({throttle:100});
 	self.jobtimer = '';
 	//notifications
 	self.treealtered = ko.observable(false);
-	self.statusbtn = ko.computed(function(){ //notification button
-		var str = '';
-		if(self.treealtered()){
-			str = '<span style="color:red">Realign needed</span>';
-		}
-		
-		var running=0,ready=0;
-		$.each(self.sortedjobs(),function(i,job){
+	self.statusbtn = ko.computed(function(){ //notifications button
+		var msgarr = [], running = 0, ready = 0, str = '';
+		if(self.treealtered()) msgarr.push({short:'<span style="color:red">Realign</span>', long:'<span style="color:red">Realign needed</span>'});
+		$.each(serverdata.jobdata(),function(i,job){
 			if(job.status()=='running') running++;
 			else if(!job.imported()) ready++;
 		});
-		var total = running+ready;
-		if(total>0){
-			if(str != ''){
-				str += '<span class="btnsection"><span class="nr">'+total+'</span></span>';
-			}
-			else{
-				str = 'Jobs ';
-				if(running > 0) str += 'running <span class="nr red">'+running+'</span>';
-				if(ready > 0) str += 'ready <span class="nr green">'+ready+'</span>';
-			}
-			if(running > 0){
+		if(running||ready){
+			running = running? '<span class="nr red">'+running+'</span>' : '';
+			ready = ready? '<span class="nr green">'+ready+'</span>' : '';
+			msgarr.push({short:running+' '+ready, long:'Jobs'+(running?' running '+running:'')+(ready?' ready '+ready:'')});
+			
+			if(running){ //update running jobs status
 				if(self.jobtimer) clearTimeout(self.jobtimer);
-				self.jobtimer = setTimeout(function(){ communicate('alignstatus','','jobdata'); },2000); //update data every 2s
+				self.jobtimer = setTimeout(function(){ communicate('alignstatus','','jobdata'); },4000);
 			}
 		}
-		if(self.sortedjobs().length==0&&!self.treealtered()&&$("#jobstatus").length!=0){ setTimeout(function(){ $("#jobstatus img.closebtn").click(); },500); } //close empty status window
+		if(msgarr.length>1){ //build notifications summary
+			str = msgarr[0].short;
+			for(var m=1;m<msgarr.length;m++) str += '<span class="btnsection">'+msgarr[m].short+'</span>';
+		} else if (msgarr.length) str = msgarr[0].long; 
+		
+		if(!msgarr.length && $("#jobstatus").length) setTimeout(function(){$("#jobstatus img.closebtn").click()},500); //close empty status window
 		return str;
 	}).extend({throttle: 200});
 	//imported alignments list (library window)
 	self.sortanalysopt = [{t:'Name',v:'name'},{t:'Analysis ID',v:'id'},{t:'Start date',v:'starttime'},{t:'Last opened',v:'imported'},{t:'Last saved',v:'savetime'}];
 	self.sortanalysby = ko.observable('starttime');
-	self.sortedanalys = ko.computed(function(){ return sortdata('analysdata',self.sortanalysby()); }).extend({throttle:100});
+	self.sortedanalys = ko.computed(function(){
+		return sortdata('analysdata',self.sortanalysby());
+	}).extend({throttle:100});
 	self.additem = function(div){ if($(div).hasClass('itemdiv')) $(div).hide().fadeIn(800); };
 	self.removeitem = function(div){ $(div).remove(); };
 	//undo stack
-	self.activeundo = {name:ko.observableArray([{name:ko.observable('History')}]), undone:ko.observable(''), data:ko.observable('')};
+	self.activeundo = {name:ko.observableArray(), undone:ko.observable(''), data:ko.observable('')};
 	self.refreshundo = function(data,redo){
 		if(!self.undostack().length){
-			self.activeundo.name()[0].name('History'); self.activeundo.data('');
+			self.activeundo.name.removeAll(); 
+			self.activeundo.data('');
 		} else {
 			if(!data) data = self.undostack()[0];
 			var name = data.name.length>8? data.name.split(' ')[0] : data.name;
@@ -249,12 +297,13 @@ var myModel = function(){
 	self.selectundo = function(data){
 		if(data==='firsttree') data = self.gettreeundo('first');
 		self.refreshundo(data,'select');
-		togglemenu('undomenu','hide');
 	};
 	self.addundo = function(undodata,redo){
-		if(undodata.type=='tree'&&undodata.info.indexOf('subsequent')==-1) undodata.info += ' Undo will also revert any subsequent tree modifications.';
+		if(undodata.type=='tree'&&undodata.info.indexOf('also')==-1) undodata.info += ' Undo also reverts any newer tree changes above.';
 		self.undostack.unshift(undodata);
+		if(self.undostack().length>settingsmodel.undolength()) self.undostack.pop();
 		self.refreshundo(undodata,redo);
+		if(settingsmodel.storeundo) savefile();
 	};
 	self.undo = function(){
 		var undone = self.activeundo.undone;
@@ -266,14 +315,17 @@ var myModel = function(){
 			treesvg.loaddata(restore);
 			self.gettreeundo('remove',undoindex);
 		}
+		else if(data.type=='seq') undoseq(data.data, data.undoaction);
 		self.undostack.remove(data);
 		undone(true);
+		if(settingsmodel.storeundo) savefile();
 	};
 	self.redo = function(){
 		var undone = self.activeundo.undone;
 		var data = self.activeundo.data();
 		if(!data||!undone()) return;
 		if(data.type=='tree') treesvg.loaddata(data.data);
+		else if(data.type=='seq') undoseq(data.data, data.redoaction);
 		self.addundo(data,'redo');
 	};
 	self.gettreeundo = function(mode,index){
@@ -290,8 +342,101 @@ var myModel = function(){
 		return found;
 	};
 };//myModel
-
 var model = new myModel();
+
+//Datamodel for seq. tools (hiding cols)
+var myTools = function(){
+	var self = this;
+	self.hidelimit = ko.observable(5);
+	self.hidelimitperc = ko.computed(function(){
+		var limit = self.hidelimit(), rowc = model.visiblerows().length||limit;
+		if(limit<0) self.hidelimit(0); else if(limit>rowc) self.hidelimit(rowc);
+		return parseInt(limit/rowc*100);
+	}).extend({throttle:100});
+	self.slider = {w:250,offset:60,slider:{css:function(){return 60}}};
+	self.sliderpos = ko.computed(function(){ //sync input=>slider
+		var pos = parseInt((self.hidelimitperc()/100*self.slider.w)+self.slider.offset), cinp = $("#hidecolinp");
+		return cinp.length&&cinp.is(":focus")? pos+'px' : self.slider.slider.css('left');
+	}).extend({throttle:200});
+	self.gapcount = [];
+	self.gaptype = ko.observable('');
+	self.gaptype.subscribe(function(){ self.countgaps(); });
+	self.countgaps = function(){ //setup: count gaps in alignment columns
+		var l = '', gaps = [];
+		if(!model.hasdot()||~self.gaptype().indexOf('in')) gaps.push('.',':');
+		if(!model.hasdot()||~self.gaptype().indexOf('del')) gaps.push('-','_');
+		self.gapcount = [];
+		$.each(model.visiblerows(),function(n,name){
+			$.each(model.visiblecols(),function(i,c){
+				l = sequences[name][c];
+				if(i == self.gapcount.length) self.gapcount.push(0);
+				if(~gaps.indexOf(l)) self.gapcount[i]++;
+			});
+		});
+		var sliderline = $('#seqtool .draggerline');
+		self.slider.slider = sliderline.length? $('.dragger',sliderline) : self.slider.slider;
+		self.slider.w = sliderline.length? sliderline.width() : self.slider.w;
+		self.slider.offset = sliderline.length? sliderline.position().left-17 : self.slider.offset;
+		$("#hidecolinp").focus();
+		self.hidelimit.valueHasMutated();
+		setTimeout(function(){ $("#hidecolinp").blur() },500);
+	};
+	self.gaplen = ko.observable(0);
+	self.buflen = ko.observable(0);
+	self.hidecolcount = ko.computed(function(){ //preview result
+		var colestimate = 0, rows = model.visiblerows().length, threshold = self.hidelimit(), range = [], ranges = [], dialog = $('#seqtool').length;
+		var minlen = parseInt(self.gaplen()), buflen = parseInt(self.buflen());
+		if(minlen<0){ minlen=0; self.gaplen(0); }
+		if(buflen<0){ buflen=0; self.buflen(0); }else if(minlen<buflen*2){ buflen = parseInt((minlen-1)/2); self.buflen(buflen); }
+		var processrange = function(c){
+			range[1] = c; var rangespan = range[1]-range[0];
+			if(rangespan>minlen){ range[0]+=buflen; range[1]-=buflen; ranges.push(range); colestimate += rangespan-(2*buflen); }
+			range = [];
+		};
+		$.each(self.gapcount,function(c,gaps){
+			if(rows-gaps<threshold){ if(!range.length) range[0] = c; }
+			else if(range.length) processrange(c);
+		});
+		if(range.length) processrange(self.gapcount.length);
+		if(dialog){ //preview, mark columns
+			setTimeout(function(){
+				colflags = []; clearselection(); if(model.selmode()!='columns') model.selmode('columns');
+				$.each(ranges,function(i,carr){ selectionsize('','',carr); for(var r=carr[0];r<carr[1];r++){ colflags[r] = 1; }});
+			}, 100);
+		}
+		return colestimate;
+	}).extend({throttle:500});
+	self.hidecolperc = ko.computed(function(){ return parseInt(self.hidecolcount()/self.gapcount.length*100) });
+	self.hidecols = function(){};
+	
+	self.prunemode = false;
+	self.leafaction = ko.observable();
+	self.leafsel = ko.observable();
+	self.markLeafs = function(unmark){
+		if(unmark){ $.each(leafnodes,function(n,node){ if(node.active) node.highlight(false); }); return; }
+		registerselections();
+		$.each(model.visiblerows(),function(r,name){ if(rowflags[r]&&leafnodes[name]) leafnodes[name].highlight(true); });
+	};
+	self.processLeafs = function(){ //hide/remove all marked/unmarked leafs
+		var markedcount = $('#names tspan[fill=orange]').length;
+		var target = self.leafsel()=='unmarked'? false : true;
+		var affected = target? markedcount : model.visiblerows().length-markedcount;
+		var func = self.leafaction()=='prune'? 'remove':'hideToggle';
+		if(!affected || model.visiblerows().length-affected<4){
+			var errtxt = func=='remove'? 'Can\'t prune: ':'Can\'t hide: ';
+			errtxt += !affected? 'nothing to '+self.leafaction()+'.' : 'less than 4 leafs would remain.';
+			$('#treetoolerror').text(errtxt);
+			setTimeout(function(){$('#treetoolerror').empty()},3000); return;
+		}
+		if(!model.treesnapshot) model.treesnapshot = treesvg.data.root.removeAnc().write('tags');
+		$.each(leafnodes,function(n,node){ if(node.active==target) node[func]('hide','nocount'); });
+		treesvg.refresh();
+		var actdesc = func=='remove'? 'removed' : 'hidden', actname = func=='remove'? 'Remove' : 'Hide';
+		model.addundo({name:actname+' leafs',type:'tree',data:treesvg.data.root.removeAnc().write('tags'),info:affected+' leafs were '+actdesc+'.'});
+		$("#treetool img.closebtn").click();
+	};
+};
+var toolsmodel = new myTools();
 
 //HTML element transitions when viewmodel data changes
 ko.bindingHandlers.fadevisible = {
@@ -317,7 +462,7 @@ ko.bindingHandlers.fadeText = {
 };
 var slideadd = function(el){ $(el).css('display','none'); $(el).slideDown() };
 var slideremove = function(el){ $(el).slideUp(400,function(){ $(this).remove() }) };
-var marginadd = function(elarr,data){ if(data.name()=='History') elarr[0].style.marginTop=0; else setTimeout(function(){ elarr[0].style.marginTop=0 },50); };
+var marginadd = function(elarr){ setTimeout(function(){ elarr[0].style.marginTop=0 },50); };
 var waitremove = function(el){ setTimeout(function(){ $(el).remove() },500) };
 
 //HTML rendering for running jobs (jobstatus window)
@@ -374,14 +519,22 @@ var analysmodel = function(data){
     		var removebtn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','','Delete folder '+this.id(),'removebtn');
     	}
     	else{ //no output files specified in metadata
-    		var itembtn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','color:red','Delete folder '+this.id());
-    		var removebtn = '';
-    		imported += ' (broken)';
+    		var thisid = this.id();
+    		var activejob = ko.utils.arrayFirst(serverdata.jobdata(),function(job){ return job.id()==thisid });
+    		if(activejob){
+    			var itembtn = btnhtml('dialog(\'jobstatus\')','Status','View running background processes');
+    			var removebtn = '';
+    			imported += ' (running job)'
+    		} else {
+    			var itembtn = btnhtml('dialog(\'removeitem\',{id:\''+this.id()+'\',btn:this})','Delete','color:red','Delete folder '+this.id());
+    			var removebtn = '';
+    			imported += ' (broken)';
+    		}
     	}
     	
     	if(this.hasOwnProperty('aligner') && this.aligner()){ //item started as alignment job
     		var alignerdata = this.aligner().split(':');
-    		var source = '<span class="note">Aligner:</span> <span class="label" title="Executable: '+alignerdata[1]+'">'+alignerdata[0]+'</span><br><span class="note">Parameters:</span> <span class="logline label" style="cursor:text" title="'+this.parameters()+'">'+this.parameters()+'<span class="fade"></span></span>';
+    		var source = '<span class="note">Aligner:</span> <span style="cursor:default" title="Executable: '+alignerdata[1]+'">'+alignerdata[0]+'</span><br><span class="note">Parameters:</span> <span class="logline" style="cursor:text" title="'+this.parameters()+'">'+this.parameters()+'<span class="fade"></span></span>';
     	}
     	else{ //item was imported
     		var sourcedata = this.hasOwnProperty('source')&&this.source()? 'from '+this.source() : 'files';
@@ -395,7 +548,11 @@ var analysmodel = function(data){
     	
     	var idend = this.id().lastIndexOf('/');
 		var folderid = idend!=-1? this.id().substring(idend+1) : this.id();
-		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+imported+'<br><span class="note">File directory:</span> <span class="actiontxt" title="Toggle folder content" onclick="showfile(this,\''+this.id()+'\')">'+folderid+'</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+saved+'<br>'+source+childbtn+removebtn+'<span class="actiontxt itemexpand" onmousedown="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC; More info</span></div>';
+		return '<div><span class="note">Name:</span> <input type="text" class="hidden" onblur="communicate(\'writemeta\',{id:\''+this.id()+
+		'\',key:\'name\',value:this.value})" value="'+this.name()+'" title="Click to edit"><br><span class="note">Last opened:</span> '+
+		imported+'<br><span class="note">File directory:</span> <span class="rotateable">&#x25BA;</span><span class="actiontxt" title="Browse folder" onclick="showfile(this,\''+
+		this.id()+'\')">'+folderid+'</span><br>'+itembtn+'<span class="note">Started:</span> '+msectodate(this.starttime())+'<br><span class="note">Last saved:</span> '+
+		saved+'<br>'+source+childbtn+removebtn+'<span class="actiontxt itemexpand" onmousedown="toggleitem(this,\''+this.divh+'\')" title="Toggle additional info">&#x25BC; More info</span></div>';
     }, this).extend({throttle: 100});
 }
 
@@ -412,17 +569,20 @@ function toggleitem(btn,starth){ //expand/contract job divs (library window)
 	return false; //onclick
 }
 
-function showfile(btn,file){ //show file/folder content from server (library window)
+function showfile(btn,file){ //show logfile/folder content from server (status/library window)
 	var logdiv = $(btn).closest('div.itemdiv').next('div.logdiv');
-	if(logdiv.length==0){ //logdiv not yet created
+	var rotatearr = $(btn).prev('span.rotateable');
+	if(!logdiv.length){ //logdiv not yet created
 		logdiv = $('<div class="insidediv logdiv">');
 		$(btn).closest('div.itemdiv').after(logdiv);
 	}
 	else if(logdiv.css('display')!='none'){
+		if(rotatearr.length) rotatearr.removeClass('rotateddown');
 		logdiv.slideUp(200);
 		return false;
 	}
-	if(~file.indexOf('.')){ //file
+	if(rotatearr.length) rotatearr.addClass('rotateddown');
+	if(~file.indexOf('.')){ //logfile
 		$.ajax({
 			type: "GET",
 			url: file,
@@ -438,12 +598,18 @@ function showfile(btn,file){ //show file/folder content from server (library win
     	communicate('getdir',{dir:'analyses/'+file},{success: function(data){
     		filearr = data.split('|');
     		var str = '', outfile = ''; //mark resultfile in filelist
-    		$.each(serverdata['analysdata'](),function(i,meta){ if(file==meta.id()) outfile = meta.outfile(); });
+    		$.each(serverdata['analysdata'](),function(i,meta){ if(file==meta.id()&&meta.outfile) outfile = meta.outfile(); });
     		$.each(filearr,function(i,f){
     			fdata = f.split(':');
-    			if(~outfile.indexOf(fdata[0])) fdata[0] = '<span title="Main data file" style="color:darkred;cursor:default">'+
+    			str += '<div class="row">';
+    			if(~outfile.indexOf(fdata[0])) str += '<span title="Main data file" style="color:darkred;cursor:default">'+
     			fdata[0]+'</span>';
-    			str += fdata[0]+' ('+numbertosize(fdata[1],'byte')+')<br>'; });
+    			else str += fdata[0];
+    			str += '<span class="note">'+numbertosize(fdata[1],'byte')+'</span> ';
+    			if(!isNaN(fdata[1])) str += '<a class="button" onclick="dialog(\'export\',{exporturl:\''+
+    			'analyses/'+file+'/'+fdata[0]+'\'});return false;" title="View file content">View</a>';
+    			str += '</div>';
+    		});
     		logdiv.html(str);
     		logdiv.slideDown(); 
     	}});
@@ -472,11 +638,13 @@ function communicate(action,senddata,options){ //send and receive(+save) data fr
     	$(options.btn).off('click').click(retryfunc);
     }
     var endfunc = ''; //follow-up data refresh
-    if(action=='writemeta'||action=='save'||action=='startalign') var endfunc = function(){
+    if(action=='writemeta'||action=='save'||action=='startalign'){
+      var endfunc = function(){
     	if (action!='save') communicate('alignstatus','','jobdata');
     	if (action!='startalign') communicate('getmeta',{parentid:parentid(senddata.id)},'analysdata');
-    };
-    if(action=='alignstatus'&&typeof(options)=='string') options = {saveto:options,retry:true}; //retry in case of error
+      };
+    }
+    if(action=='alignstatus' && typeof(options)=='string') options = {saveto:options,retry:true}; //retry in case of error
     		
 	return $.ajax({
 		type: "POST",
@@ -493,7 +661,13 @@ function communicate(action,senddata,options){ //send and receive(+save) data fr
     		var successfunc = '';
     		if(action=='save'){
 				successfunc = function(data){
-    				try{ data = JSON.parse(data); model.currentid(data.id); }catch(e){};
+    				try{
+    					data = JSON.parse(data); model.currentid(data.id);
+    					if(settingsmodel.keepid){
+    						localStorage.currentid = JSON.stringify(data.id);
+    						localStorage.currentfile = JSON.stringify("analyses/"+data.id+"/saved.xml");
+    					}
+    				}catch(e){ console.log('JSON error in savefile response'); };
     				if(options.btn) options.btn.innerHTML = 'Saved';
     			}
     		}
@@ -571,13 +745,13 @@ function togglemenu(id,action,data){ //show/hide dropdown menus
 	if(action=='show'){
 		menudiv.parent().css('display','block');
 		if(menudiv.height()==0){ menudiv.parent().css('display','none'); return; }
-		setTimeout(function(){ menudiv.css('margin-top','-1px') },50);
+		menudiv.css('margin-top',-1);
 	}
 	else if (action=='hide'){
 		$.each($('div.buttonmenu'),function(){
 			var self = $(this);
 			self.css('margin-top',0-menudiv.innerHeight()-6+'px');
-			setTimeout(function(){ self.parent().css('display','none') },400);
+			setTimeout(function(){ self.parent().css('display','none') },700);
 		});
 	}
 }
@@ -613,7 +787,7 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 	var errors = [], notes = [], treeoverwrite = false, seqoverwrite = false;
 	var Tidnames = {}, Tsequences = '', Ttreedata = '', Ttreesource = '', Tseqsource = '', Tseqformat = '';
 	var Ttotalseqcount=0, Tmaxseqlen=0, Talignlen=0, Tminseqlen=0, Tleafcount=0, Tnodecount=0;
-	var metaidnames = {}, nodeinfo = {};
+	var metaidnames = {}, nodeinfo = {}, visiblecols = [];
 	var ensinfo = options.ensinfo || {};
 	if(options.id){ //item imported from library. Get metadata.
 		var importdata = ko.mapping.toJS(serverdata.importdata);
@@ -621,6 +795,7 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 			metaidnames = importdata.idnames || {};
 			nodeinfo = importdata.nodeinfo || {};
 			ensinfo = importdata.ensinfo || {};
+			visiblecols = importdata.visiblecols || [];
 		}
 		$.each(ko.mapping.toJS(serverdata.analysdata),function(d,jobdata){
 			if(jobdata.id==options.id && jobdata.source) options.source = jobdata.source;	
@@ -841,14 +1016,15 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 		}
 		if(treeoverwrite){ notes.push('Tree data found in multiple files. Using '+Ttreesource); }
 		if(seqoverwrite){ notes.push('Sequence data found in multiple files. Using '+Tseqsource); }
+		dom.wrap.css('left',0); dom.seq.css('margin-top',0); dom.treewrap.css('top',0); //reset scroll
 		
 		if(!Ttreedata && namearr.length){ //no tree: fill placeholders (otherwise done by jsPhyloSVG)
-			visiblerows.removeAll(); leafnodes = {};
+			model.visiblerows.removeAll(); leafnodes = {};
 			var nodecount = 0, leafcount = namearr.length; Ttreesource = false;
 			$.each(namearr,function(indx,arrname){
 				leafnodes[arrname] = {name:arrname};
 				if(nodeinfo[arrname]) leafnodes[arrname].ensinfo = nodeinfo[arrname];
-				visiblerows.push(arrname); 
+				model.visiblerows.push(arrname); 
 			});
 		} else if(Ttreedata){ //get leaf count estimate
 			var nodecount = Ttreedata.phyloxml ? $(Ttreedata.phyloxml).find("clade").length : Ttreedata.newick.match(/\(/g).length;
@@ -891,9 +1067,10 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 			sequences = Tsequences; model.totalseqcount(namearr.length); model.alignlen(Talignlen);
 			model.minseqlen(Tminseqlen); model.maxseqlen(Tmaxseqlen); idnames = Tidnames;
 			model.seqsource(Tseqsource); maskedcols = [];
-			visiblecols.removeAll(); for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); }//mark visible columns
+			if(visiblecols.length) model.visiblecols(visiblecols);
+			else{ model.visiblecols.removeAll(); for(var c=0;c<model.alignlen();c++){model.visiblecols.push(c)} } //mark visible columns
 			model.undostack.remove(function(item){ return item.type=='seq'} );
-			makecolors(); 
+			makecolors();
 	  	}
 	  	
 	  	model.ensinfo(ensinfo);
@@ -937,7 +1114,7 @@ function parseimport(options){ //options{dialog:jQ,update:true}
 /* Output file parsing */
 function parseexport(filetype,options){
 	var usemodel = false;
-	if(!filetype&&!options){ //exportwindow: use datamodel
+	if(!filetype&&!options){ //'Make file' clicked: use datamodel
 		usemodel = true;
 		exportmodel.fileurl('');
 		var filetype = exportmodel.format().name;
@@ -960,12 +1137,14 @@ function parseexport(filetype,options){
 	var regex = regexstr ? new RegExp('['+regexstr+']','g') : '';
 	var translate = regexstr ? function(s){ return dict[s] || s; } : '';
 	
-	var names = options.includeanc? Object.keys(sequences) : Object.keys(leafnodes);
+	var leafnames = [];
+	$.each(leafnodes,function(leafname,obj){ if(obj.type!='ancestral') leafnames.push(leafname) });
+	var names = options.includeanc? Object.keys(sequences) : leafnames;
 	var specount = names.length, ntcount = model.alignlen();
 	if(options.makeids||filetype=='HSAML'){ //replace names with ids (for alignment jobs)
 		var seqi=0, parenti=0, tempid='';
 		$.each(names,function(j,name){
-			if(leafnodes[name]){ seqi++; tempid='sequence'+seqi; }
+			if(~leafnames.indexOf(name)){ seqi++; tempid='sequence'+seqi; }
 			else { parenti++; tempid='parent'+parenti; }
 			nameids[name] = tempid;
 		});
@@ -987,10 +1166,11 @@ function parseexport(filetype,options){
   		output = "<ms_alignment>\n";
   		if(treefile) output += "<newick>\n"+treefile+"</newick>\n";
 		
-		output += "<nodes>\n";
+		output += "<nodes>\n"; var isleaf;
   		$.each(names,function(j,name){
-    		var xmlnode = leafnodes[name]? "\t<leaf " : "\t<node ";
-    		xmlnode += "id=\""+(nameids[name]||name)+"\" name=\""+name+"\">\n\t\t<sequence>\n\t\t"+sequences[name].join('')+"\n\t\t</sequence>\n"+(leafnodes[name]?"\t</leaf>\n":"\t</node>\n");
+  			isleaf = ~leafnames.indexOf(name);
+    		var xmlnode = isleaf? "\t<leaf " : "\t<node ";
+    		xmlnode += "id=\""+(nameids[name]||name)+"\" name=\""+name+"\">\n\t\t<sequence>\n\t\t"+sequences[name].join('')+"\n\t\t</sequence>\n"+(isleaf?"\t</leaf>\n":"\t</node>\n");
     		output += xmlnode;
   		});
   		output += "</nodes>\n";
@@ -1004,11 +1184,21 @@ function parseexport(filetype,options){
 	}
 	else if(filetype=='newick'){ output = treefile; }
 	
-	if(usemodel||options.nodeexport){ //export to exportwindow
-		if(options.nodeexport){ output = options.nodeexport; exportmodel.category(exportmodel.categories[1]); }
+	if(usemodel||options.exportdata){ //export data to exportwindow & make download url
+		if(options.exportdata){
+			output = options.exportdata;
+			filename = 'exported_subtree.nwk';
+			exportmodel.filename(filename);
+		} else filename = exportmodel.filename()+exportmodel.fileext();
 		$('#exportedwindow .paper').text(output);
 		$('#exportwrap').addClass('flipped');
-		communicate('makefile',{filename:exportmodel.filename()+exportmodel.fileext(),filedata:output},exportmodel.fileurl);
+		communicate('makefile',{filename:filename,filedata:output},exportmodel.fileurl);
+	}
+	else if(options.exporturl){ //export server file to exportwindow
+		$.get(options.exporturl+'?text',function(txt){$('#exportedwindow .paper').text(txt)},'text');
+		$('#exportwrap').addClass('flipped');
+		exportmodel.fileurl(options.exporturl);
+		exportmodel.filename(options.exporturl.substr(options.exporturl.lastIndexOf('/')+1));
 	}
 	if(options.makeids) output += '|'+JSON.stringify(nameids);
 	return output;
@@ -1016,18 +1206,17 @@ function parseexport(filetype,options){
 
 //Save current MSA data to local server (library)
 function savefile(btn){
-	btn.style.opacity = 0.6;
-	btn.innerHTML = 'Saving';
+	if(btn){ btn.style.opacity = 0.6; btn.innerHTML = 'Saving'; } else btn = false;
 	var filedata = parseexport('HSAML',{includetree:true,includeanc:true,tags:true});
 	var savename = exportmodel.savetarget().type=='overwrite'? '':exportmodel.savename();
 	var nodeinfo = {};
-	$.each(leafnodes,function(name,node){ if(node.ensinfo) nodeinfo[name] = node.ensinfo; });
+	$.each(leafnodes,function(name,node){ if(node.ensinfo&&node.type!='ancestral') nodeinfo[name] = node.ensinfo; });
 	if($.isEmptyObject(nodeinfo)) nodeinfo = '';
+	var visiblecols = model.hiddenlen()? model.visiblecols() : '';
 	var ensinfo = $.isEmptyObject(model.ensinfo())? '' : model.ensinfo();
-	communicate('save',{
-		writemode:exportmodel.savetarget().type, file:filedata, name:savename, source:model.sourcetype(), parentid:model.parentid(), id:model.currentid(), ensinfo:ensinfo, nodeinfo:nodeinfo
-	},{btn:btn});
-	setTimeout(function(){ $("#savewindow img.closebtn").click(); },2000);
+	communicate('save', {writemode:exportmodel.savetarget().type, file:filedata, name:savename, source:model.sourcetype(),
+		parentid:model.parentid(), id:model.currentid(), ensinfo:ensinfo, nodeinfo:nodeinfo, visiblecols:visiblecols}, {btn:btn});
+	if($("#save").length) setTimeout(function(){ $("#save img.closebtn").click(); },2000);
 	return false;
 }
 
@@ -1038,23 +1227,23 @@ function makecolors(){
    	}
    	else if(model.colorscheme()=='dna'){ colors = {"A":["","rgb(0,0,255)"],"T":["","rgb(255, 255, 0)"],"G":["","rgb(0, 255, 0)"],"C":["","rgb(255, 0, 0)"],"U":["","rgb(255, 255, 0)"]}; }
    	colors['-']=['#ccc',"rgb(255,255,255)"];colors['.']=['#e3e3e3',"rgb(255,255,255)"];colors['?']=['#f00',"rgb(255,255,255)"];
-   	if(model.hasdot()) colors['-'][0] = "#999"; //darker del.
-   	for(var i=0;i<letters.length;i++){ //make colors for all letters/symbols (+darker bg for masked symbols)
+   	if(model.hasdot()) colors['-'][0] = "#999"; //darker del. symbol
+   	for(var i=0;i<letters.length;i++){
    		var symbol = letters[i];
    		var unmasked = i%2==0 ? true : false;
-   		if(model.colorscheme()=='rainbow'){
+   		if(model.colorscheme()=='rainbow'){ //generate all colors
    			var color = unmasked ? rainbow(letters.length,i) : mixcolors(rainbow(letters.length,i-1),[100,100,100]);
    			if(!colors[symbol]){ colors[symbol] = ["",color]; }
    		}
    		else{
-   			if(!colors[symbol]){ //symbols outside of colorscheme: grey bg
-   				if(unmasked){ colors[symbol] = ["","rgb(200,200,200)"]; }
-   				else{ colors[symbol] = ["",mixcolors(colors[letters[i-1]][1],[100,100,100])]; }
+   			if(!colors[symbol]){ //make missing color
+   				if(unmasked){ colors[symbol] = ["","rgb(200,200,200)"]; } //symbols outside of colorscheme: grey bg
+   				else{ colors[symbol] = ["",mixcolors(colors[letters[i-1]][1],[100,100,100])]; } //masked symbols: shade darker
    			}
    		}
-   		var rgb = colors[symbol][1].match(/\d{1,3}/g);
-   		var brightness = Math.sqrt(rgb[0]*rgb[0]*.241 + rgb[1]*rgb[1]*.691 + rgb[2]*rgb[2]*.068); //perceived brightness
-   		var fgcolor = brightness<110 ? "#eee" : "#333"; //lettercolor for dark background
+   		var rgb = colors[symbol][1].match(/\d{1,3}/g); //adjust letter color for bg brightness
+   		var brightness = Math.sqrt(rgb[0]*rgb[0]*.241 + rgb[1]*rgb[1]*.691 + rgb[2]*rgb[2]*.068);
+   		var fgcolor = brightness<110 ? "#eee" : "#333";
    		if(!colors[symbol][0]){ colors[symbol][0] = fgcolor; }
    		
    		symbols[symbol] = { 'fgcolor' : colors[symbol][0], 'bgcolor' : colors[symbol][1] };
@@ -1063,9 +1252,9 @@ function makecolors(){
    	} //Result: symbols = {'A':{'fgcolor':'#ccc','bgcolor':'#fff','masked':'a','unmasked':'A'},'a':{maskedcolors,..}}
 }
 
-//Note: color palette: http://jsfiddle.net/k8NC2/1/  jalview color schemes
-function rainbow(numOfSteps, step, adjust){
-    //Generates vibrant, "evenly spaced" colours. Adapted from blog.adamcole.ca
+//Note: a color palette: http://jsfiddle.net/k8NC2/1/ jalview color schemes
+//Generates vibrant, evenly spaced colors. Adapted from blog.adamcole.ca
+function rainbow(numOfSteps, step){
     var r, g, b;
     var h = step / numOfSteps;
     var i = ~~(h * 6);
@@ -1082,7 +1271,7 @@ function rainbow(numOfSteps, step, adjust){
     return 'rgb('+parseInt(r*255)+','+parseInt(g*255)+','+parseInt(b*255)+')';
 }
 
-function mixcolors(color,mix){
+function mixcolors(color,mix){ //shade colors (masking)
 	var rgb = color.match(/\d{1,3}/g);
 	var r = Math.floor((parseInt(rgb[0])+mix[0])/2);
 	var g = Math.floor((parseInt(rgb[1])+mix[1])/2);
@@ -1093,22 +1282,22 @@ function mixcolors(color,mix){
 function redraw(options){
 	if(!options) options = {};
 	else if(options=='zoom') options = {zoom:true};
-	canvaspos = []; colflags = []; rowflags = []; //clear selections and its flags
-	lastselectionid = 0; activeid = false;
+	canvaspos = []; colflags = []; rowflags = []; activeid = ''; //clear selections and its flags
 	$("#seq div[id*='selection'],#seq div[id*='cross']").remove();
 	
-	var newheight = visiblerows().length ? visiblerows().length*model.boxh() : model.leafcount()*model.boxh();
+	var newheight = model.visiblerows().length ? model.visiblerows().length*model.boxh() : model.leafcount()*model.boxh();
 	if(!options.zoom){ dom.treewrap.css('height',newheight); $("#names svg").css('font-size',model.fontsize()+'px'); }
 	if($.isEmptyObject(treesvg)){ //no tree loaded
 	  if(options.phyloxml||options.newick){ //make tree SVG
 		$label = $("#namelabel"); $labelspan = $("#namelabel span");
 		dom.tree.empty(); dom.names.empty();
 		dom.wrap.css('left',0); dom.seq.css('margin-top',0);
-		dom.treewrap.css({top:0,height:newheight});
 		$("#notree").fadeOut(); dom.tree.css('box-shadow','none');
 		dom.treewrap.css('background-color','white');
 		
-		treesvg = new Smits.PhyloCanvas(options, model.nameswidth(), dom.treewrap.width(), newheight);
+		treesvg = new Smits.PhyloCanvas(options);
+		newheight = treesvg.svg.canvasSize[1];
+		dom.treewrap.css({top:0,height:newheight});
 		var svg = $("#tree>svg,#names>svg");
 		svg.mousedown(function(e){ //handle nodedrag on tree
 			e.preventDefault();
@@ -1133,7 +1322,7 @@ function redraw(options){
 		dom.tree.empty(); dom.names.empty();
 		dom.treewrap.css('background-color','transparent');
 		$("#notree").fadeIn(); $("#tree").css('box-shadow','-2px 0 2px #ccc inset');
-		$.each(visiblerows(),function(n,name){
+		$.each(model.visiblerows(),function(n,name){
 			var leafname = leafnodes[name].ensinfo? leafnodes[name].ensinfo.species : name;
 			var nspan = $('<span style="height:'+model.boxh()+'px;font-size:'+model.fontsize()+'px">'+leafname+'</span>');
 			
@@ -1178,7 +1367,7 @@ function redraw(options){
 	} //no treeSVG
    	if(dom.treewrap.css('display')=='none') setTimeout(function(){dom.treewrap.fadeTo(300,1,'linear')},10);
    	
-	var newwidth = visiblecols().length*model.boxw();
+	var newwidth = model.visiblecols().length*model.boxw();
 	if(options.zoom){//keep sequence positioned in center of viewport after zoom
 		dom.seq.empty(); dom.seq.append('<div id="rborder" class="rowborder">');
 		var oldwidth = parseInt(dom.seq.css('width')); var oldheight = parseInt(dom.seq.css('height'));
@@ -1195,13 +1384,12 @@ function redraw(options){
 		else $("#names span").css({'height':model.boxh()+'px','font-size':model.fontsize()+'px'});
 	}
 	dom.seq.css({ 'width':newwidth, 'height':newheight });
-	if(!options.treeonly){ makeRuler(); makeCanvases(); makeImage(); }
+	if(!options.treeonly){ makeRuler(); makeCanvases(); makeImage('','cleanup'); }
 	if(!dom.seqwindow.data("contentWidth")){ mCustomScrollbar(0,"easeOutCirc","auto","yes","yes",10); } else { $(window).trigger('resize'); }
 }
 
-function refresh(e,hidemenu){ //redraw tree & sequence
-	if(e) e.stopPropagation();
-	if(hidemenu) $('html').click();//hidetooltip()
+function refresh(e){ //redraw tree > sequence
+	if(e){ e.stopPropagation(); $('html').click(); } //hide tooltips
 	if(treesvg.refresh) treesvg.refresh();
 };
 
@@ -1257,8 +1445,7 @@ function makeCanvases(){
 }
 
 var tmpc = 0;
-function makeImage(target){
-	//var start = new Date().getTime();
+function makeImage(target,cleanup){
 	var targetx,targety;
 	if(target){
 		var tarr = target.split(':');
@@ -1270,17 +1457,18 @@ function makeImage(target){
 	var rowstartpix = parseInt((0-targety)/model.boxh());
 	var colstart = colstartpix-(colstartpix%colstep); //snap to (colstep-paced) tile grid
 	var colend = parseInt((dom.seqwindow.innerWidth()-targetx)/model.boxw());
-	if(colend>visiblecols().length){ colend = visiblecols().length; }
+	var visiblecols = model.visiblecols();
+	if(colend>visiblecols.length) colend = visiblecols.length;
+	if($('#seqtool').length) toolsmodel.hidelimit.valueHasMutated(); //seqtool window => update column preview
 	var rowstart = rowstartpix-(rowstartpix%rowstep); //snap to grid
 	var rowend = parseInt(((dom.seqwindow.innerHeight()-$("#ruler").outerHeight())-targety)/model.boxh());
-	if(rowend>visiblerows().length){ rowend = visiblerows().length; }
-	var rowdraws = [];
-	var canvascount = 0;
+	if(rowend>model.visiblerows().length){ rowend = model.visiblerows().length; }
+	var rowdraws = {};
+	var canvascount = 0; //rendering 4-6 tiles => show spinner
 	var totalcount = 0;
-	var $spinner = $("#spinner");
-	for(var row = rowstart; row<rowend; row+=rowstep){
+	for(var row = rowstart; row<rowend; row+=rowstep){ //loop over canvas grid
 	  for(var col = colstart; col<colend; col+=colstep){
-		if($.inArray(row+'|'+col,canvaspos) == -1){ //canvas not yet made
+		if(canvaspos.indexOf(row+'|'+col)==-1){ //canvas not yet made
 			canvaspos.push(row+'|'+col);
 			rowdraws[row+'|'+col] = {};
 			rowdraws[row+'|'+col].canvasrow = row;
@@ -1293,17 +1481,16 @@ function makeImage(target){
 				var tile = $('<div class="tile">');
 				canvas.width = colstep*model.boxw();
 				canvas.height = rowstep*model.boxh();
-				var endrow = rowdraws[r+'|'+c].row+rowstep>visiblerows().length ? visiblerows().length : rowdraws[r+'|'+c].row+rowstep;
+				var endrow = rowdraws[r+'|'+c].row+rowstep>model.visiblerows().length? model.visiblerows().length : rowdraws[r+'|'+c].row+rowstep;
 				canvas.setAttribute('id',r+'|'+c);
 				var canv = canvas.getContext('2d');
-				//canv.clearRect(0,0,canvas.width,canvas.height);
-				while(rowdraws[r+'|'+c].canvasrow < endrow){
-					var seqdata = sequences[visiblerows()[rowdraws[r+'|'+c].canvasrow]];
-					if(!seqdata) continue; //no sequence data: skip row
-					var endcol = rowdraws[r+'|'+c].col+colstep>seqdata.length ? seqdata.length : rowdraws[r+'|'+c].col+colstep;
+				while(rowdraws[r+'|'+c].canvasrow < endrow){ //draw rows of sequence to the tile
+					var seqdata = sequences[model.visiblerows()[rowdraws[r+'|'+c].canvasrow]];
+					if(!seqdata){ rowdraws[r+'|'+c].canvasrow++; continue; } //no sequence data: skip row
+					var endcol = rowdraws[r+'|'+c].col+colstep>visiblecols.length? visiblecols.length : rowdraws[r+'|'+c].col+colstep;
 					for(var canvascol=c;canvascol<endcol;canvascol++){
-						seqletter = seqdata[visiblecols()[canvascol]];
-						if(!symbols[seqletter]){ symbols[seqletter] = symbols['?'] }
+						seqletter = seqdata[visiblecols[canvascol]];
+						if(!seqletter) continue; else if(!symbols[seqletter]) symbols[seqletter] = symbols['?'];
 						canv.drawImage( symbols[seqletter]['canvas'], (canvascol - rowdraws[r+'|'+c].col)*model.boxw()+1, (rowdraws[r+'|'+c].canvasrow - rowdraws[r+'|'+c].row)*model.boxh()+1);
 					}
 					rowdraws[r+'|'+c].canvasrow++;
@@ -1313,51 +1500,55 @@ function makeImage(target){
 				tile.append(canvas);
 				rowdraws[r+'|'+c] = {};
 				setTimeout(function(){ tile.css('opacity',1) },50);
-				setTimeout(function(){ //remove any covered canvas.
+				setTimeout(function(){ //remove obsolete tiles
 					var pos1 = tile.position(); var prevdivs = tile.prevAll('.tile');
 					prevdivs.each(function(){
 						var pos2 = $(this).position(); 
-						if(pos1.left==pos2.left && pos1.top==pos2.top) $(this).remove(); 
-				}); },500);
-				if(canvascount==totalcount){ if($spinner.css('display')=='block' ){ setTimeout(function(){$spinner.fadeOut(200);},50); } }
+						if(cleanup||pos1==pos2) $(this).remove();
+					})
+					if(cleanup) cleanup = false;
+				},1000);
+				if(canvascount==totalcount){ if($("#spinner").css('display')=='block' ){ setTimeout(function(){$("#spinner").fadeOut(200);},50); } }
 			}}(row,col),10);
 		}//make canvas	
 	  }//for cols
 	}//for rows
-	if(totalcount>2){ $spinner.css({display:'block',opacity:1}); }
+	if(totalcount>3){ $("#spinner").css({display:'block',opacity:1}); }
 }
 
 
 function makeRuler(){
 	var $ruler = $("#ruler");
 	$ruler.empty();
-	var tick = 10;
-	var tickw = tick*model.boxw()-4;
-	var k = '';
-	var markerdiv = function(scol,ecol){ //make markers for hidden columns
-		var capindex = scol==0 ? 0 : visiblecols.indexOf(scol-1)+1;
-		var l = capindex*model.boxw()-7;
+	var tick = 10, tickw = tick*model.boxw()-4, k = '', visiblecols = model.visiblecols();
+	var markerdiv = function(scol,ecol){ //func. to make markers for hidden columns
+		var gapindex = scol==0 ? 0 : visiblecols.indexOf(scol-1)+1;
+		var l = gapindex*model.boxw()-8;
 		var colspan = ecol-scol;
-		var div = $('<div class="marker" style="left:'+l+'px">&#x25BC</div>');
-		div.mouseenter(function(e){ tooltip(e,'Click to reveal '+colspan+' hidden columns.',{target:div[0]}) });
-		div.click(function(){
-			for(var c=scol;c<ecol;c++,capindex++){ visiblecols.splice(capindex,0,c); } 
-			hidetooltip(); redraw(); 
-		});
+		var sclass = colspan==1? 'small': colspan>5? 'big' : '';
+		var div = $('<div class="marker '+sclass+'" style="left:'+l+'px">&#x25BC<div>|</div></div>');
+		div.mouseenter(function(e){ tooltip(e,'Click to reveal '+colspan+' hidden column'+(colspan==1?'':'s')+'.',{target:div[0]}) });
+		div.click(function(){ showcolumns([[scol,ecol]],'hidetip'); redraw(); });
 		return div;
 	}
-	if(visiblecols()[0]!==0){ $ruler.append(markerdiv(0,visiblecols()[0])); }
-	for(var t=0;t<visiblecols().length-1;t++){
-		if((visiblecols()[t+1]-visiblecols()[t])!=1){ $ruler.append(markerdiv(visiblecols()[t]+1,visiblecols()[t+1])); }
-	  	if(t%tick==0){//make ruler tickmarks
+	if(visiblecols[0]!==0) $ruler.append(markerdiv(0,visiblecols[0]));
+	for(var t=0;t<visiblecols.length-1;t++){
+		if((visiblecols[t+1]-visiblecols[t])!=1){ //a column gap => add marker
+			if(visiblecols[t+1]<=visiblecols[t]){ //columns array corrupt. clean up array. redraw.
+				visiblecols.sort(function(a,b){return a-b});
+				for(var i=1;i<visiblecols.length;i++){ if(visiblecols[i-1]==visiblecols[i]) visiblecols.splice(i,1); }
+				redraw(); return;
+			}
+			$ruler.append(markerdiv(visiblecols[t]+1,visiblecols[t+1]));
+		}
+	  	if(t%tick==0){ //make ruler tickmarks
 			k = t;
+			if(t+tick>visiblecols.length) tickw = (visiblecols.length%tick)*model.boxw()-4;
 			if(model.boxw()<4){ if(t%100==0){ if(t>=1000){ k = '<span>'+(t/1000)+'K</span>'; }else{ k = '<span>'+t+'</span>'; } }else{ k = '&nbsp;'; } }
 			$ruler.append($('<span style="width:'+tickw+'px">'+k+'</span>'));
 		}
 	}
-	if(visiblecols()[visiblecols().length-1] != model.alignlen()-1){
-		$ruler.append(markerdiv(visiblecols()[visiblecols().length-1]+1,model.alignlen()));
-	}
+	if(visiblecols[visiblecols.length-1] != model.alignlen()-1) $ruler.append(markerdiv(visiblecols[visiblecols.length-1]+1,model.alignlen()));
 }
 
 function zoomin(){
@@ -1372,7 +1563,7 @@ function movenode(drag,movednode,movedtype){ //Create 'move node' mode (tree bra
 	if(!movednode) return false;
 	$("#left").addClass('dragmode');
 	$("#namesborderDragline").addClass('dragmode');
-	movednode.highlight();
+	movednode.highlight(true);
 	setTimeout(function(){
 		tooltip('','Move node: '+(drag?'drop node to':'click on')+' target branch or node.',{target:{startx:200,starty:100},arrow:'bottom',autohide:6000});
 	}, 400);
@@ -1423,7 +1614,7 @@ function movenode(drag,movednode,movedtype){ //Create 'move node' mode (tree bra
 	  		if(movednode && targetnode){ movednode.move(targetnode); refresh(); }
 	  	}
 	  	else if (drag && targettype=='DIV' && evnt.target.id=='treebin'){ if(movednode) movednode.remove(); refresh(); }
-	  	movednode.unhighlight();
+	  	movednode.highlight(false);
 	  	$("#left,#right,#namesborderDragline").removeClass('dragmode');
 	  	if(drag){ helper.remove(); $("div.treescroll").remove(); }
 	  	$("#page").unbind('mousemove'); hidetooltip();
@@ -1459,7 +1650,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
 		var arr = options.arrow;
 		tipdiv.addClass(arr+'arrow');
 	} else var arr = false;
-	var tipstyle = options.style||settings.tooltipclass()||'';
+	var tipstyle = options.style||settingsmodel.tooltipclass()||'';
 	
 	var node = options.target || {};
 	if(tipstyle!='none' && !node.edgeCircleHighlight) tipdiv.addClass(tipstyle); //custom style (excludes treemenu)
@@ -1482,7 +1673,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     		}
     		else{ //place next to element
     			x = elem.offset().left+15;
-    			y = elem.offset().top+15;
+    			y = elem.offset().top+10;
     			if(elem.hasClass('svgicon')){ x+=20; y-=18; }
     			if(!arr) y+= node.height;
     		}
@@ -1522,12 +1713,12 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     	tiptitle.append(nodeicon);
     	var ul = $('<ul>');
     	var hideli = $('<li class="arr" '+(node.parent?'':'style="color:#888"')+'><span class="svgicon" title="Collapse node and its children">'+svgicon('hide')+'</span>Hide this node <span class="right">\u25B8</span></li>');
-    	hideli.click(function(){ node.hideToggle(); refresh('','hidemenus'); });
+    	hideli.click(function(){ node.hideToggle(); refresh(); });
     	var hidemenu = {};
     	$.each(node.children,function(i,child){ //child nodes submenu
     		if (child.type == 'ancestral') return true; //skip anc.
     		var litxt = '<span class="svgicon" title="(Un)collapse a child node">'+(i==0?svgicon('upper'):svgicon('lower'))+'</span>'+(child.hidden?'Show ':'Hide ')+(i==0?'upper ':'lower ')+' child';
-    		hidemenu[litxt] = {click:function(e){child.hideToggle(); refresh(e,'hidemenus')}};
+    		hidemenu[litxt] = {click:function(e){child.hideToggle(); refresh(e)}};
     		if(child.children.length && child.hidden){ //preview hidden children
     			var createpreview = function(){ //create treepreview on the fly
     				var preview = $('<span style="margin-left:5px" class="svgicon">'+svgicon('view')+'</span>');
@@ -1543,7 +1734,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     			hidemenu[litxt]['append'] = createpreview;
     		}
     	});
-    	hidemenu['<span class="svgicon" title="Uncollapse all child nodes">'+svgicon('children')+'</span>Show all children'] = function(e){ node.showSubtree(); refresh(e,'hidemenus'); };
+    	hidemenu['<span class="svgicon" title="Uncollapse all child nodes">'+svgicon('children')+'</span>Show all children'] = function(e){ node.showSubtree(); refresh(e); };
     	hideli.mouseenter(function(evt){ tooltip(evt,'',{target:hideli[0],data:hidemenu,style:'none'}); });
     	var ancnode = node.children[node.children.length-2];
     	if(ancnode.type=='ancestral'){ //ancestral nodes submenu
@@ -1551,8 +1742,8 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     		var ancli = $('<li class="arr"><span class="svgicon" title="'+h+' ancestral sequence">'+svgicon('ancestral')+'</span>'+h+' ancestral seq. <span class="right">\u25B8</span></li>');
     		ancli.click(function(){ ancnode.hideToggle(); refresh(); });
     		var ancmenu = {};
-    		ancmenu['<span class="svgicon" title="Show ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Show subtree ancestors'] = function(e){ node.showSubtree('anc'); refresh(e,'menu'); };
-    		ancmenu['<span class="svgicon" title="Hide ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Hide subtree ancestors'] = function(e){ node.showSubtree('anc','hide'); refresh(e,'menu'); };
+    		ancmenu['<span class="svgicon" title="Show ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Show subtree ancestors'] = function(e){ node.showSubtree('anc'); refresh(e); };
+    		ancmenu['<span class="svgicon" title="Hide ancestral sequences of the whole subtree">'+svgicon('ancestral')+'</span>Hide subtree ancestors'] = function(e){ node.showSubtree('anc','hide'); refresh(e); };
     		ancli.mouseenter(function(evt){ tooltip(evt,'',{target:ancli[0],data:ancmenu,style:'none'}); });
     	} else var ancli = '';
     	var swapli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Swap places of child nodes">'+svgicon('swap')+'</span>Swap children</li>');
@@ -1566,16 +1757,16 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     		remli.click(function(){ node.remove(); refresh(); });
     		if(node.leafCount>2){
     			var prunemenu = {};
-    			prunemenu['<span class="svgicon" title="Remove all nodes except this subtree">'+svgicon('prune')+'</span>Prune subtree'] = function(e){ node.prune(); refresh(e,'menu'); };
+    			prunemenu['<span class="svgicon" title="Remove all nodes except this subtree">'+svgicon('prune')+'</span>Prune subtree'] = function(e){ node.prune(); refresh(e); };
     			remli.mouseenter(function(evt){ tooltip(evt,'',{target:remli[0],data:prunemenu,style:'none'}); });
     		}
     	}
     	var expli = $('<li style="border-top:1px solid #999"><span class="svgicon" title="Export this subtree in newick format">'+svgicon('file')+'</span>Export subtree</li>');
-    	expli.click(function(){ hidetooltip(tipdiv); dialog('export',{nodeexport:node.write()}); });
+    	expli.click(function(){ hidetooltip(tipdiv); dialog('export',{exportdata:node.write()}); });
     	ul.append(hideli,ancli,swapli,moveli,rerootli,remli,expli);
     	tipcontent.append(ul);
     	tipcontentwrap.css({'overflow':'hidden','height':tipcontent.innerHeight()+'px'}); //slidedown
-    	setTimeout(function(){tipcontentwrap.css('overflow','visible')},500);
+    	setTimeout(function(){tipcontentwrap.css('overflow','visible')},300);
       }
       else{ //general pop-up menu
       	if(options.data.tagName) tipcontent.append(options.data); //DOM element in tooltip
@@ -1608,7 +1799,7 @@ function tooltip(evt,title,options){ //make tooltips & pop-up menus
     			$(node).append(tipdiv);
 		   		$(node).one('mouseleave',function(){ hidetooltip(tipdiv); }); 
     		}
-      		$('html').one('click', function(){ hidetooltip('','','seqmenu'); if(node.treenode) node.treenode.unhighlight(); });
+      		$('html').one('click', function(){ hidetooltip('','','seqmenu'); if(node.treenode) node.treenode.highlight(false); });
      	}
    	  }
    }
@@ -1639,36 +1830,49 @@ function hidetooltip(tooltip,exclude,seqmenu){
 	tooltips.each(function(){
 		var tip = $(this);
 		tip.removeClass('opaque');
-		if(tip.attr('id')){ 
+		if(tip.attr('id')&&tip.attr('id')!='namemenu'){ 
 			setTimeout(function(){
 				tip.css('display','none');
 				$(".tooltipcontent",tip).empty(); 
 				if($(".tooltipcontentwrap",tip).hasClass('hidden')) $(".tooltipcontentwrap",tip).css('height',0); 
 			},300);
 		}
-		else setTimeout(function(){ tip.remove(); },400);
+		else setTimeout(function(){ tip.remove(); },500);
 	});
 }
 
 function selectionsize(e,id,type){ //make or resize a sequence selection box
 	if(typeof(type)=='undefined'){ var type = 'rb', start = {}; }
-	else if(typeof(type)=='object'&&type.x&&type.y){ //type = mouse startpos{x,y}
-		var dx = e.pageX-type.x; var dy = e.pageY-type.y;
-		if(dx<10||dy<10){ return; }
-		else{ var start = {x:type.x,y:type.y}, type = 'rb'; }
+	else if(typeof(type)=='object'){ //type => mouse startpos{x,y} || columns [start,end]
+		var start = type.length? {x:type[0]*model.boxw(),w:type[1]-type[0]} : type.x&&type.y? {x:type.x,y:type.y} : {x:0,y:0};
+		if(type.length && (type[1]*model.boxw()<Math.abs(dom.wrap.position().left) || type[0]*model.boxw()>Math.abs(dom.wrap.position().left)+dom.seqwindow.innerWidth())) return; //outside of seqwindow
+		if(e){
+			var dx = e.pageX-type.x, dy = e.pageY-type.y;
+			if(dx<10||dy<10) return; else type = 'rb';
+		}
 	}
-	if($("#selection"+id).length==0){//create selectionbox
+	id = id || activeid;
+	if(!id){ //create new selectionbox
+		id = activeid = $("div[id^='selection']").length+1;
+		var x=0, y=0, w=1, h=1;
 		dom.seq.append('<div id="selection'+id+'" class="selection"><div class="description"></div><div class="ltresize"></div><div class="rbresize"></div></div>\
 			<div id="vertcross'+id+'" class="selectioncross"><div class="lresize"></div><div class="rresize"></div></div>\
 			<div id="horicross'+id+'" class="selectioncross"><div class="tresize"></div><div class="bresize"></div></div>');
-		var x = (start.x||e.pageX)-dom.seq.offset().left-2;
-		x = x-(x%model.boxw());
-		var y = (start.y||e.pageY)-dom.seq.offset().top;
-		y = y-(y%model.boxh());
-		if(x<0){ x=0; } if(y<0){ y=0; }
-		$("#selection"+id).css({'left':x,'top':y,'width':model.boxw(),'height':model.boxh(),'display':'block'});
-		$("#vertcross"+id).css({'left':x,'top':'0','width':model.boxw(),'height':dom.seq.innerHeight(),'display':model.selmode()=='columns'?'block':'none'});
-		$("#horicross"+id).css({'left':'0','top':y,'width':dom.seq.innerWidth(),'height':model.boxh(),'display':model.selmode()=='rows'?'block':'none'});
+		if(typeof(type)=='object'){ //coordinates given
+			x = start.x||x;
+			y = start.y||model.boxh()*model.visiblerows().length-model.boxh();
+			w = start.w||w;
+			activeid = '';
+		}
+		else{ //coordinates from mouse
+			x = (start.x||e.pageX)-dom.seq.offset().left-2;
+			y = (start.y||e.pageY)-dom.seq.offset().top;
+		}
+		x = x-(x%model.boxw()); y = y-(y%model.boxh()); //snap to grid
+		if(x<0) x=0; if(y<0) y=0;
+		$("#selection"+id).css({'left':x,'top':y,'width':model.boxw()*w,'height':model.boxh()*h,'display':'block'});
+		$("#vertcross"+id).css({'left':x,'top':'0','width':model.boxw()*w,'height':dom.seq.innerHeight(),'display':model.selmode()=='columns'?'block':'none'});
+		$("#horicross"+id).css({'left':'0','top':y,'width':dom.seq.innerWidth(),'height':model.boxh()*h,'display':model.selmode()=='rows'?'block':'none'});
 		dom.seqwindow.mouseup(function(){ //attach resize handles
 			$("#selection"+id).mouseenter(function(){ $("#selection"+id+" div.rbresize, #selection"+id+" div.ltresize").css('opacity','1'); });
 			$("#selection"+id).mouseleave(function(){ $("#selection"+id+" div.rbresize, #selection"+id+" div.ltresize").css('opacity','0'); });
@@ -1695,12 +1899,11 @@ function selectionsize(e,id,type){ //make or resize a sequence selection box
 				dom.seqwindow.mousemove(function(evt){ selectionsize(evt,id,'t'); });
 			});
 		});
-		lastselectionid++;
-	}
-	else {//resize existing box
+	} else { //resize existing selection
 		var over = e.target.id ? e.target : e.target.parentNode;
 		if(over.tagName=='DIV'&&id!=over.id.substr(0-id.toString().length)){ return false; }//avoid overlap
 		var seldiv = $("#selection"+id);
+		if(!seldiv.length) return;
 		if(type!='b'&&type!='t'){
 			if(type=='r'||type=='rb'){
 				var w = e.pageX-seldiv.offset().left-5;
@@ -1761,7 +1964,8 @@ function registerselections(id){//set flags in seq. selection vectors
 function clearselection(id){
 	id = typeof(id)=='undefined' ? false : id;
 	if(id){ $("#selection"+id).remove(); $("#vertcross"+id).remove(); $("#horicross"+id).remove(); }
-	else{ $("#seq div.selection").each(function(){ id = this.id.substr(9); $("#selection"+id).remove(); $("#vertcross"+id).remove(); $("#horicross"+id).remove(); }); }
+	else{ $("#seq div[id*='selection'],#seq div[id*='cross']").remove(); }
+	activeid = '';
 }
 
 function toggleselection(type,id,exclude){ //toggle row/column selection
@@ -1781,7 +1985,7 @@ function seqinfo(e){ //character info tooltip (on sequence click)
 	var y = e.pageY-dom.seq.offset().top-2;
 	y = parseInt(y/model.boxh());
 	if(x<0){ x=0; } if(y<0){ y=0; }
-	var col = visiblecols()[x]; var name = visiblerows()[y];
+	var col = model.visiblecols()[x]; var name = model.visiblerows()[y];
 	if(!sequences[name]) return false;
 	var suppl = col==x ? '' : '<br>(column '+(col+1)+' if uncollapsed)';
 	var seqpos = sequences[name].slice(0,col+1).join('').replace(/[_\-.:]/g,'').length;
@@ -1793,15 +1997,45 @@ function seqinfo(e){ //character info tooltip (on sequence click)
 	return {content:content, row:x, col:y, startx:x*model.boxw(), starty:y*model.boxh(), width:model.boxw(), height:model.boxh()}
 }
 
-function hidecolumns(e,id){
-	if(e){ e.stopPropagation(); hidetooltip(); }
-	if(id=='revealall'){ visiblecols([]); for(var c=0;c<model.alignlen();c++){ visiblecols.push(c); } }
-	else{
-		registerselections(id);
-		var adj = 0; //adjustment for  array length decrease
-		for(var c=0;c<colflags.length;c++){ if(colflags[c]){ visiblecols.splice(c-adj,1); adj++; } }//remove columns from list
+function hidecolumns(e,id){ //make columns hidden (based on [selections =>]columnflags)
+	if(e){ e.stopPropagation(); hidetooltip(); registerselections(id); }
+	var undodata = [], range = [], col = 0;
+	if(id && id=='noundo') undodata = false;
+	for(var c=0,adj=0;c<colflags.length;c++){
+		if(undodata){
+			col = model.visiblecols()[c-adj];
+			if(colflags[c]){ if(!range.length) range[0] = col; }
+			else if(range.length){ range[1] = col; undodata.push(range); range = []; } 
+		}
+		if(colflags[c]){ model.visiblecols.splice(c-adj,1); adj++; } //remove columns from rendering list
+	}
+	if(undodata){
+		if(range.length){ range[1] = col+1; undodata.push(range); }
+		if(undodata.length){
+			var s = undodata.length==1? ' was' : 's were';
+			var undodesc = undodata.length+' alignment column range'+s+' collapsed.';
+			model.addundo({name:'Collapse columns',type:'seq',data:undodata,info:undodesc,
+			undoaction:'show columns',redoaction:'hide columns'});
+		}
 	}
 	redraw();
+}
+
+function showcolumns(gaparr,hidetip){ //make columns visible again (based on input ranges)
+	if(hidetip) hidetooltip();
+	if(gaparr=='all'){ model.visiblecols.removeAll(); for(var c=0;c<model.alignlen();c++){model.visiblecols.push(c)}; redraw(); return; }
+	var visiblecols = model.visiblecols();
+	$.each(gaparr, function(i,gapcols){
+		if(gapcols.length!=2) return true;
+		var scol = gapcols[0], ecol = gapcols[1], start = 0, del = 0, fill = [];
+		$.each(visiblecols,function(i,c){ if(c>=scol){ //indexes to fill in
+				if(i&&!start) start = i;
+				if(c<ecol) del++; else return false;
+		}});
+		for(var f=scol;f<ecol;f++){ fill.push(f); }
+		if(scol>=visiblecols.length) start = visiblecols.length;
+		model.visiblecols.splice.apply(model.visiblecols,[start,del].concat(fill));
+	});
 }
 
 function hiderows(e,id){ //hide seq. rows from seq. area
@@ -1809,54 +2043,101 @@ function hiderows(e,id){ //hide seq. rows from seq. area
 	var namearr = [];
 	action = 'hide';
 	registerselections(id);
-	for(var r=0;r<rowflags.length;r++){ if(rowflags[r]){ namearr.push(visiblerows()[r]); }}
-	$.each(namearr,function(n,name){ leafnodes[name].hideToggle('hide'); });
+	for(var r=0;r<rowflags.length;r++){ if(rowflags[r]){ namearr.push(model.visiblerows()[r]); }}
+	$.each(namearr,function(n,name){ if(leafnodes[name]) leafnodes[name].hideToggle('hide'); });
 	refresh();
 }
 
 function maskdata(e,action,id){ //mask a sequence region
 	if(e){ e.stopPropagation(); hidetooltip(); }
-	var target = ~action.indexOf('rows')? 'rows' : ~action.indexOf('columns')? 'columns' : 'selection';
+	var target = ~action.indexOf('rows')? 'rows' : ~action.indexOf('columns')? 'columns' : 'selections';
 	if(~action.indexOf('unmask')){ var symboltype = 'unmasked'; var flag = false; } else { var symboltype = 'masked'; var flag = 1; }
 	registerselections(id);
+	var undodata = {}, undodesc = '';
 	
-	if(~action.indexOf('all')){ for(var name in sequences){ for(var c=0;c<sequences[name].length;c++) sequences[name][c] = symbols[sequences[name][c]][symboltype]; }}
+	if(~action.indexOf('all')){
+		for(var name in sequences){ for(var c=0;c<sequences[name].length;c++) sequences[name][c] = symbols[sequences[name][c]][symboltype]; }
+	}
 	else if(action=='hidemaskedcols'){
 		for(var c=0;c<maskedcols.length;c++){ 
 			if(maskedcols[c]){
-				var colind = visiblecols.indexOf(c);
-				if(colind != -1){ visiblecols.splice(colind,1); }
+				var colind = model.visiblecols.indexOf(c);
+				if(~colind){ model.visiblecols.splice(colind,1); }
 			} 
 		}
 	}
-	else if(target=='columns'){	
-		for(var c=0;c<colflags.length;c++){
-			if(colflags[c]){
-				var colid = visiblecols()[c];
-				for(var name in sequences){ if(~visiblerows.indexOf(name)){ sequences[name][colid] = symbols[sequences[name][colid]][symboltype]; }}
-				maskedcols[colid] = flag;
-			}
-		}
+	else if(target=='columns'){
+		undodata._columns = []; var firstrow = true;
+		for(var name in sequences){ if(~model.visiblerows.indexOf(name)){
+			if(flag) undodata[name] = 'columns';
+			for(var c=0;c<colflags.length;c++){ if(colflags[c]){
+					var colid = model.visiblecols()[c];
+					sequences[name][colid] = symbols[sequences[name][colid]][symboltype];
+					maskedcols[colid] = flag;
+					if(flag && firstrow) undodata._columns.push(colid);
+			}}
+			firstrow = false;
+		}}
+		undodesc = undodata._columns.length+' alignment columns were masked.';
 	}
 	else if(target=='rows'){
-		for(var r=0;r<rowflags.length;r++){
-			if(rowflags[r]){
-				var name = visiblerows()[r];
+		for(var r=0;r<rowflags.length;r++){ if(rowflags[r]){
+				var name = model.visiblerows()[r];
+				if(flag) undodata[name] = 'all';
 				for(var c=0;c<sequences[name].length;c++){ sequences[name][c] = symbols[sequences[name][c]][symboltype]; }
+		}}
+		undodesc = Object.keys(undodata).length+' sequences were masked.';
+	}
+	else if(target=='selections'){
+		for(var s=0;s<selections.length;s++){
+			var sel = selections[s];
+			for(var r=sel.rowstart;r<sel.rowend;r++){
+				var name = model.visiblerows()[r];
+				if(!undodata[name]) undodata[name] = [];
+				for(var c=sel.colstart;c<=sel.colend;c++){
+					var colid = model.visiblecols()[c];
+					sequences[name][colid] = symbols[sequences[name][colid]][symboltype];
+					if(flag) undodata[name].push(colid);
+					else maskedcols[colid] = false;
+				}
+			}
+		}
+		undodesc = selections.length+' alignment blocks were masked.';
+	}
+	if(!$.isEmptyObject(undodata)){
+		model.addundo({name:'Mask '+target,type:'seq',data:undodata,info:undodesc,undoaction:'unmask',redoaction:'mask'});
+	}
+	redraw();
+}
+
+function undoseq(undodata,action){ //undo/redo sequence actions
+	if(~action.indexOf('mask')){ //(un)mask seq. areas/rows/columns
+		var symboltype = ~action.indexOf('unmask')? 'unmasked' : 'masked';
+		var columns = undodata._columns? undodata._columns : [];
+		for(name in undodata){
+			if(!sequences[name]) continue;
+			if(undodata[name]==='all'){
+				for(var c=0;c<sequences[name].length;c++) sequences[name][c] = symbols[sequences[name][c]][symboltype];
+			} else {
+				if(undodata[name]!=='columns') columns = undodata[name];
+				for(var c=0;c<columns.length;c++) sequences[name][columns[c]] = symbols[sequences[name][columns[c]]][symboltype];
 			}
 		}
 	}
-	else if(target=='selection'){
-		for(var s=0;s<selections.length;s++){
-			var sel = selections[s];
-			for(var c=sel.colstart;c<=sel.colend;c++){
-				var colid = visiblecols()[c];
-				for(var r=sel.rowstart;r<sel.rowend;r++){
-					var name = visiblerows()[r];
-					sequences[name][colid] = symbols[sequences[name][colid]][symboltype];
+	else if(~action.indexOf('columns')){ //(un)hide seq. columns
+		if(~action.indexOf('show')) showcolumns(undodata);
+		else if(~action.indexOf('hide')){
+			colflags = [];
+			var c = 0, i = 0; visiblecols = model.visiblecols();
+			$.each(undodata,function(i,range){
+				if(range.length!=2) return true;
+				var scol = range[0], ecol = range[1];
+				for(;i<visiblecols.length;i++){ //column range=>colflags
+					c = visiblecols[i];
+					if(c>=scol){ if(c<ecol) colflags[i] = 1; else break; }
 				}
-				if(!flag){ maskedcols[colid] = false; }
-			}
+			});
+			hidecolumns('','noundo');
 		}
 	}
 	redraw();
@@ -1864,7 +2145,8 @@ function maskdata(e,action,id){ //mask a sequence region
 
 /* Generate pop-up windows */
 function makewindow(title,content,options,container){ //(string,array(,obj{flipside:'front'|'back',backfade,btn:string|jQObj|array,id:string},jQObj))
-	if(!options){ var options = {}; }
+	if(!options) options = {};
+	if(!$.isArray(content)) content = [content];
 	if(options.id && $('#'+options.id).length!=0){ $('#'+options.id).remove(); }//kill clones
 	if(options.flipside){ //we make two-sided window
 		var sideclass = 'side '+options.flipside;
@@ -1877,6 +2159,7 @@ function makewindow(title,content,options,container){ //(string,array(,obj{flips
 		var wrapdiv = container ? container : windowdiv; 
 		wrapdiv.removeClass('zoomed'); setTimeout(function(){ wrapdiv.remove() },600); 
 		if(shade.css('display')!='none'){ shade.css('opacity',0); setTimeout(function(){ shade.hide() },600); }
+		if(options.closefunc) options.closefunc();
 	};
 	closebtn.click(closefunc);
 	if(options.btn){ //add buttons
@@ -1894,7 +2177,7 @@ function makewindow(title,content,options,container){ //(string,array(,obj{flips
 	contentdiv.css('max-height',$('#right').innerHeight()+'px');
 	var headerdiv = $('<div class="windowheader"></div>');
 	if(options.header){ $.each(options.header,function(i,val){ headerdiv.append(val) }); }
-	if(options.icn){ if(options.icn.indexOf('.')==-1) options.icn += '.png'; title = '<img class="windowicn" src="img/'+options.icn+'"> '+title; }
+	if(options.icn){ if(options.icn.indexOf('.')==-1) options.icn+='.png'; title = '<img class="windowicn" src="img/'+options.icn+'"> '+title; }
 	titlediv.html(title);
 	$.each(content,function(i,val){ contentdiv.append(val) });
 	windowdiv.append(headerdiv,contentdiv,titlediv,closebtn);
@@ -1905,7 +2188,7 @@ function makewindow(title,content,options,container){ //(string,array(,obj{flips
 		var curz = parseInt($(windiv).css('z-index'));
 		if((curz<maxz) || (curz==maxz&&first)) $(windiv).css('z-index',maxz+1);
     }
-	if($('#page>div.popupwindow').length>0){ //place a new window to shifted overlap
+	if($('#page>div.popupwindow').length){ //place a new window to shifted overlap
 		toFront(dragdiv,'first');
 		var pos = $('#page>div.popupwindow').last().position();
 		dragdiv.css({'top':pos.top+20+'px','left':pos.left+20+'px'});
@@ -1932,6 +2215,7 @@ function makewindow(title,content,options,container){ //(string,array(,obj{flips
 
 //Content for different types of pop-up windows
 function dialog(type,options){
+	if($('#'+type).length){ $('#'+type).trigger('mousedown');  return; } //window laready created. bring it to front.
 	var helpimg = $('<img class="icn" src="img/help.png">');
 	if(type=='import'){
 		$('div.popupwindow').remove(); //close other windows
@@ -2011,16 +2295,18 @@ function dialog(type,options){
 		var flipdialog = makewindow("Import data",[],{backfade:false,flipside:'back',icn:'import.png'},dialogwrap);
 	} //import dialog
 	else if(type=='export'){
-		if($("#exportwrap").length>0){ //use existing window
-			$("#exportwrap").click(); 
-			if(options&&options.nodeexport) parseexport('',{nodeexport:options.nodeexport});
+		if(~exportmodel.filename().indexOf('.')) exportmodel.filename('exported_data'); //reset temp. filename
+		if($("#exportwrap").length){ //use existing window
+			$("#exportwrap").click();
+			$("#exportwrap").removeClass('flipped');
+			if(options) parseexport('',options);
 			return;
 		}
 		var exportwrap = $('<div id="exportwrap" class="popupwrap zoomin">');
 		$("#page").append(exportwrap);
 		var frontcontent = $('<div class="sectiontitle" style="min-width:320px"><img src="img/file.png"><span>File</span></div>'+
 		'<span class="cell">Data<hr><select data-bind="options:categories, optionsText:\'name\', value:category"></select></span>'+
-		'<span class="cell" data-bind="with:category,fadevisible:category().formats.length>0">Format<hr><span data-bind="visible:formats.length==1,text:formats[0].name"></span><select data-bind="visible:formats.length>1, options:formats, optionsText:\'name\', value:$parent.format"></select></span>'+
+		'<span class="cell" data-bind="with:category,fadevisible:category().formats.length">Format<hr><span data-bind="visible:formats.length==1,text:formats[0].name"></span><select data-bind="visible:formats.length>1, options:formats, optionsText:\'name\', value:$parent.format"></select></span>'+
 		'<span class="cell" data-bind="with:format,fadevisible:format().variants.length>1">Variant<hr><select data-bind="options:variants, optionsText:\'name\', value:$parent.variant"></select></span> '+
 		'<span class="svgicon" style="margin-left:-8px" data-bind="fadevisible:variant().desc,attr:{title:variant().desc,onclick:infolink()}">'+svgicon('info')+'</span><br>'+
 		'&nbsp;Name: <input type="text" class="hidden" style="width:200px;text-align:right;margin:0" title="Click to edit" data-bind="value:filename"><span style="font-size:17px" data-bind="visible:variant().ext.length<2,text:variant().ext[0]"></span><select data-bind="visible:variant().ext.length>1, options:variant().ext, value:fileext"></select><br>'+
@@ -2032,25 +2318,26 @@ function dialog(type,options){
 		var makebtn = $('<a class="button" data-bind="visibility:format">Make file</a>');
 		makebtn.click(function(){ parseexport(); });
 		var frontwindow = makewindow("Export data",frontcontent,{icn:'export.png',id:'exportwindow',flipside:'front',btn:makebtn},exportwrap);
-		var backcontent = $('<div class="sectiontitle"><img src="img/file.png"><span data-bind="text:filename()+fileext()"></span></div>'+
+		var backcontent = $('<div class="sectiontitle"><img src="img/file.png"><span data-bind="text:filename()+(~filename().indexOf(\'.\')?\'\':fileext())"></span></div>'+
 		'<div class="insidediv" style="max-width:400px;max-height:150px;overflow:auto"><div class="paper"></div></div>');
-		var backbtn = $('<a class="button" style="padding-left:17px;margin-top:25px">&#x25C0; Back</a>');
-		backbtn.click(function(){ $("#exportwrap").removeClass('flipped') });
-		var downloadbtn = $('<a class="button" style="margin-left:40px;margin-top:25px" data-bind="visible:fileurl,attr:{href:fileurl}">Download</a>');
-		var backwindow = makewindow("Export data",[backcontent,backbtn,downloadbtn],{icn:'export.png',id:'exportedwindow',flipside:'back'},exportwrap);
+		var backbtn = $('<a class="button" style="padding-left:17px;margin-top:25px"><span style="vertical-align:2px">&#x25C0;</span> Setup</a>');
+		backbtn.click(function(){
+			$("#exportwrap").removeClass('flipped');
+			if(~exportmodel.filename().indexOf('.')) exportmodel.filename('exported_data'); 
+		});
+		var downloadbtn = $('<a class="button" style="margin-left:40px;margin-top:25px" data-bind="visible:fileurl,attr:{href:fileurl()+\'?download\'}">Download</a>');
+		var backwindow = makewindow("Export data",[backcontent,backbtn,downloadbtn],{icn:'export.png', id:'exportedwindow', flipside:'back'},exportwrap);
 		ko.applyBindings(exportmodel,exportwrap[0]);
-		if(options&&options.nodeexport) parseexport('',{nodeexport:options.nodeexport});
+		if(options) parseexport('',options);
 	}
 	else if(type=='save'){
-		if($("#savewindow").length>0){ $("#savewindow").trigger('mousedown');  return; } //bring window to front
 		var content = 'Save current data as <span data-bind="visible:!model.currentid(),text:savetarget().name"></span><select data-bind="visible:model.currentid(), options:savetargets, optionsText:\'name\', value:savetarget"></select> analysis in the library.<br><br>'+
 		'<span data-bind="fadevisible:savetarget().type!=\'overwrite\'">Name: <input type="text" class="hidden" title="Click to edit" data-bind="value:savename"></span>';
 		var savebtn = $('<a class="button" onclick="savefile(this)">Save</a>');
-		var savewindow = makewindow("Save to libray",[content],{icn:'save.png',id:'savewindow',btn:savebtn});
+		var savewindow = makewindow("Save to libray",[content],{icn:'save.png', id:type, btn:savebtn});
 		ko.applyBindings(exportmodel,savewindow[0]);
 	}
 	else if(type=='info'){
-		if($("#infowindow").length>0){ $("#infowindow").trigger('mousedown');  return; } //bring window to front
 		var list = '<ul>'+
 		'<li data-bind="visible:treesource">Number of nodes: <span data-bind="text:nodecount"></span></li>'+
 		'<li data-bind="visible:treesource">Number of leafs: <span data-bind="text:leafcount"></span></li>'+
@@ -2072,22 +2359,21 @@ function dialog(type,options){
 		'<!-- /ko --><!-- ko if: type==\'genetree\' -->'+
 		'<li>Genetree <a data-bind="attr:{href:\'http://www.ensembl.org/Multi/GeneTree?gt=\'+id,target:\'_blank\',title:\'View in Ensembl\'},text:id"></a></li>'+
 		'<!-- /ko --></ul></div>';
-		var dialogdiv = makewindow("Data information",[list,enslist],{btn:'OK',icn:'info.png',id:'infowindow'});
+		var dialogdiv = makewindow("Data information",[list,enslist],{btn:'OK',icn:'info.png',id:type});
 		ko.applyBindings(model,dialogdiv[0]);
 	}
 	else if(type=='align'){
-		var expbtn = $('<span class="rotateable">&#x25BA;</span>');
-		expbtn.click(function(e){
-			e.stopPropagation(); self = $(this);
-			var expdiv = self.parent().next(".insidediv");
-			if(expdiv.css('display')=='none'){ if(self.hasClass('rotateable')) self.addClass('rotateddown'); expdiv.slideDown(); infospan.fadeIn(); }
-			else{ if(self.hasClass('rotateable')) self.removeClass('rotateddown'); expdiv.slideUp(); infospan.fadeOut(); }
+		var rotatearr = $('<span class="rotateable">&#x25BA;</span>');
+		var opttitlespan = $('<span class="actiontxt" title="Click to toggle options">Alignment options</span>');
+		opttitlespan.click(function(){
+			var expdiv = $(this).parent().next(".insidediv");
+			if(expdiv.css('display')=='none'){ rotatearr.addClass('rotateddown'); expdiv.slideDown(); infospan.fadeIn(); }
+			else{ rotatearr.removeClass('rotateddown'); expdiv.slideUp(); infospan.fadeOut(); }
 		});
-		var opttitlespan = $('<span class="actiontxt" title="Click to toggle options">Alignment options</span>').click(function(){expbtn.click()});
 		var infospan = $('<span class="note" style="display:none;margin-left:20px">Hover options for description</span>');
 		var nameinput = $('<input type="text" class="hidden" value="Prank alignment" title="Click to edit">');
 		var namespan = $('<span class="note">Descriptive name: </span>').append(nameinput);
-		var opttitle = $('<div>').append(expbtn,opttitlespan,infospan);
+		var opttitle = $('<div>').append(rotatearr,opttitlespan,infospan);
 		var optdiv = $('<div class="insidediv" style="display:none">');
 		var treecheck = $.isEmptyObject(treesvg)?'checked="" disabled=""':''; //new tree needed
 		var parentoption = model.parentid()?'<option value="sibling" checked="checked">branch parent</option>':'';
@@ -2107,14 +2393,13 @@ function dialog(type,options){
 		optdiv.append(optform);
 		var alignbtn = $('<a class="button">Start alignment</a>');
 		alignbtn.click(function(){ sendjob({form:optform[0],btn:alignbtn,statusdiv:{div:optdiv,title:opttitle},name:nameinput.val()}); });
-		var dialogdiv = makewindow("Make alignment",['Current sequence data will be aligned with <a href="http://www.ebi.ac.uk/goldman-srv/prank" target="_blank">Prank</a> aligner.<br><hr>',namespan,opttitle,optdiv,'<br>'],{btn:alignbtn});
+		var dialogdiv = makewindow("Make alignment",['Current sequence data will be aligned with <a href="http://www.ebi.ac.uk/goldman-srv/prank" target="_blank">Prank</a> aligner.<br><hr>',namespan,opttitle,optdiv,'<br>'],{id:type,btn:alignbtn});
 		ko.applyBindings(model,dialogdiv[0]);
 	}
 	else if(type=='jobstatus'){
 		communicate('alignstatus','','jobdata'); //refresh data
-		if($("#jobstatus").length>0){ $("#jobstatus").trigger('mousedown');  return; } //bring window to front
-		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. Please realign the sequence'+
-		(model.treesnapshot? ' or revert the tree modifications.<br><a class="button square red" data-bind="visible:treesnapshot" onclick="model.selectundo(\'firsttree\'); model.undo(); return false;">Revert</a>' : '.');
+		var treenote = 'The tree phylogeny has been changed and the sequence alignment needs to be updated to reflect the new tree. Please realign the sequences'+
+		(model.treesnapshot? ' or revert the tree modifications.<br><a class="button square red" data-bind="visible:treesnapshot" onclick="model.selectundo(\'firsttree\'); model.undo(); return false;">Revert</a>' : '.<br>');
 		var notediv = $('<div class="sectiontitle" data-bind="visible:treealtered"><img src="img/info.png"><span>Notifications</span></div><div data-bind="visible:treealtered" class="sectiontxt">'+treenote+'</div>');
 		var realignbtn = $('<a class="button square">Realign</a>');
 		var optform = model.currentid()? $('<form id="realignoptform" onsubmit="return false">The realignment will <select name="writemode">'+
@@ -2123,27 +2408,26 @@ function dialog(type,options){
 		'<option value="overwrite">overwrite current</option></select> analysis files in the <a onclick="dialog(\'library\'); return false;">library</a>.</form>') : [''];
 		notediv.last().append(realignbtn,optform);
 		realignbtn.click(function(){ sendjob({form:optform[0],btn:realignbtn,name:'Realignment',realign:true}) });
-		var jobslistdiv = '<div class="sectiontitle" data-bind="visible:sortedjobs().length>0"><img src="img/run.png"><span>Status of background tasks</span></div><div class="insidediv" data-bind="visible:sortedjobs().length>0,foreach:{data:sortedjobs,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>';
-		var statuswindowdiv = makewindow("Status overview",[notediv,jobslistdiv],{id:"jobstatus",icn:'gear.png'});
+		var jobslistdiv = '<div class="sectiontitle" data-bind="visible:serverdata.jobdata().length"><img src="img/run.png"><span>Status of background tasks</span></div><div class="insidediv" data-bind="visible:serverdata.jobdata().length,foreach:{data:serverdata.jobdata,afterAdd:additem}"><div class="itemdiv" data-bind="html:html"></div><div class="insidediv logdiv"></div><hr></div>';
+		var statuswindowdiv = makewindow("Status overview",[notediv,jobslistdiv],{id:type,icn:'status'});
 		ko.applyBindings(model,statuswindowdiv[0]);
 	}
 	else if(type=='library'){
 		communicate('getmeta','','analysdata');
-		if($("#library").length>0){ $("#library").trigger('mousedown');  return; }
-		var contentdiv = $('<div class="insidediv" data-bind="foreach:{data:sortedanalys,afterAdd:additem,beforeRemove:removeitem}"><div class="itemdiv" data-bind="html:html,style:{height:divh},css:{activeitem:isactive}"></div><div class="insidediv logdiv"></div><hr></div>');
+		var content = $('<div class="insidediv" data-bind="foreach:{data:sortedanalys,afterAdd:additem,beforeRemove:removeitem}"><div class="itemdiv" data-bind="html:html,style:{height:divh},css:{activeitem:isactive}"></div><div class="insidediv logdiv"></div><hr></div>');
 		var header = ['<span class="dirtrail" data-bind="html:libdir"></span>','<span style="position:absolute;top:6px;right:15px;"><span class="fade" style="left:-35px"></span>Sort by: <select data-bind="options:sortanalysopt,optionsText:\'t\',optionsValue:\'v\',value:sortanalysby"></select></span>'];
-		var librarywindowdiv = makewindow("Library of analyses",[contentdiv],{id:"library",header:header,icn:'library.png'});
-		ko.applyBindings(model,librarywindowdiv[0]);
+		var librarywindow = makewindow("Library of analyses",content,{id:type,header:header,icn:'library.png'});
+		ko.applyBindings(model,librarywindow[0]);
 	}
 	else if(type=='removeitem'||type=='terminate'){
 		var btn = options.btn;
 		var jobbtn = btn.title.indexOf('job')==-1 ? false : true;
 		var afterfunc = jobbtn ? function(){ communicate('alignstatus','','jobdata'); } : function(){ communicate('getmeta',{parentid:parentid(options.id)},'analysdata'); };
 		var action = type=='terminate' ? 'terminate' : 'rmdir';
-		var startlabel = type=='terminate'? 'Stop' : 'Delete';
-		if(btn.innerHTML==startlabel && !jobbtn){
+		var startlabel = type=='terminate'? 'Kill' : 'Delete';
+		if(btn.innerHTML==startlabel){
 			btn.innerHTML = 'Confirm';
-			setTimeout(function(){ btn.innerHTML=startlabel; },5000);
+			setTimeout(function(){ btn.innerHTML=startlabel; },4000);
 		}else{
 			communicate(action,{id:options.id},{btn:btn,func:afterfunc});
 			if(action=='rmdir' && options.id==model.currentid()) model.currentid('');
@@ -2151,7 +2435,64 @@ function dialog(type,options){
 	}
 	else if(type=='error'){
 		if(typeof(options)!='Array') options = [options];
-		var dialogwindow = makewindow('Error',options,{btn:'Dismiss',icn:'warning'});
+		makewindow('Error',options,{btn:'Dismiss',icn:'warning'});
+	}
+	else if(type=='seqtool'){
+		var content = $('<div class="sectiontitle"><span>Filter alignment columns</span></div><div class="sectiontxt">'+
+		'Hide all sequence alignment columns where: <ul><li>less than <input id="hidecolinp" type="text" class="digit" data-bind="value:hidelimit,valueUpdate:\'afterkeydown\'"> '+
+		'<span class="note" style="min-width:78px" data-bind="text:\'(or <\'+hidelimitperc()+\'% of)\'"></span> rows contain sequence data.<br>'+
+		'<span class="note">0%</span><span class="draggerline"></span><span class="note">100%</span></li>'+
+		'<li>gaps <span data-bind="visible:model.hasdot">represent <select data-bind="options:[\'indels\',\'insertions\',\'deletions\'],value:gaptype"></select></span>'+
+		'<span data-bind="visible:!model.hasdot()">are</span> longer than <input type="text" class="digit" data-bind="value:gaplen,valueUpdate:\'afterkeydown\'"> columns.</li>'+
+		'<li>keep <input type="text" class="digit" data-bind="value:buflen,valueUpdate:\'afterkeydown\'"> columns from each gap edge visible.</li></ul>'+
+		'</div><div>This will collapse <span data-bind="text:hidecolcount"></span> columns '+
+		'<span class="note" data-bind="text:\'(\'+hidecolperc()+\'%)\'"></span> of sequence alignment.</div>');
+		var slider = $('<span class="dragger" data-bind="style:{left:sliderpos}"></span>');
+		var sliderline = $('.draggerline',content);
+		sliderline.append(slider);
+		var applybtn = $('<a class="button">Apply</a>');
+		applybtn.click(function(){ $("#seqtool img.closebtn").click(); setTimeout(function(){ hidecolumns(); },500); });
+		var dialog = makewindow('Sequence tools',content,{id:type,icn:'seq',btn:['Cancel',applybtn],closefunc:function(){clearselection()}});
+		var dragw = sliderline.width(), rowcount = model.visiblerows().length;
+		slider.draggable({ //make names width resizable
+			axis: "x", 
+			containment: 'parent',
+			drag: function(e,elem) {
+				toolsmodel.hidelimit(parseInt(((elem.position.left-sliderline.position().left+8)/dragw)*rowcount));
+			}
+		});
+		toolsmodel.countgaps();
+		ko.applyBindings(toolsmodel,dialog[0]);
+	}
+	else if(type=='treetool'){
+		var content = $('<div class="sectiontitle"><span>Prune tree leafs</span></div><div class="sectiontxt">'+
+		'You can mark/unmark tree leafs by clicking on a leaf name<br>or by dragging in the sequence area.<br><br>'+
+		'Then click "Apply" to <select data-bind="options:[\'hide\',\'prune\'],value:leafaction"></select> '+
+		'<select data-bind="options:[\'marked\',\'unmarked\'],value:leafsel"></select> tree leafs.<br>'+
+		'<span id="treetoolerror" style="color:red"></span></div>');
+		var applybtn = $('<a class="button">Apply</a>');
+		applybtn.click(toolsmodel.processLeafs);
+		var closefunc = function(){ clearselection(); toolsmodel.markLeafs('unmark'); toolsmodel.prunemode = false; };
+		var dialog = makewindow('Tree tools',content,{id:type,icn:'tree',btn:['Cancel',applybtn],closefunc:closefunc});
+		clearselection(); toolsmodel.markLeafs('unmark'); toolsmodel.prunemode = true;
+		if(model.selmode()!='rows') model.selmode('rows');
+		ko.applyBindings(toolsmodel,dialog[0]);
+	}
+	else if(type=='settings'){
+		var content = $('<div class="insidediv" style="margin:0;padding:5px;"><div class="row btnrow">Autosave after every <select data-bind="options:autosaveopt,value:autosaveint"></select> '+
+		'<a class="button square" style="margin-top:-5px" data-bind="css:{on:autosave},click:toggle.bind($data,autosave)"><span class="light"></span><span class="text" data-bind="text:btntxt(autosave)"></span></a>'+
+		'<br><span class="note" data-bind="visible:autosave">Sessions are saved to Library.</span></div>'+
+		'<div class="row">Keep up to <select data-bind="options:[1,5,15,30],value:undolength"></select> actions in undo list.</div>'+
+		'<div class="row bottombtn">Open <select style="margin-bottom:10px" data-bind="options:launchopt,value:onlaunch"></select> when launching Wasabi.<br>'+
+		'Remember zoom level on launch. <a class="button square" data-bind="css:{on:keepzoom},click:toggle.bind($data,keepzoom)"><span class="light"></span><span class="text" data-bind="text:btntxt(keepzoom)"></span></a></div>'+
+		'<div class="row">Use <select data-bind="options:coloropt,optionsText:\'n\',optionsValue:\'n\',value:colorscheme"></select> color scheme when displaying sequences.<br>'+
+		'<span class="note" data-bind="text:colorscheme().d"></span></div>'+
+		'<div class="row btnrow bottombtn">User interface animations. '+
+		'<a class="button square" data-bind="css:{on:allanim},click:toggle.bind($data,allanim)"><span class="light"></span><span class="text" data-bind="text:btntxt(allanim)"></span></a>'+
+		'<div style="padding-left:10px;margin-top:5px">Dialog window animations. <a class="button square" style="margin-top:7px;" data-bind="css:{on:windowanim},click:toggle.bind($data,windowanim)"><span class="light"></span><span class="text" data-bind="text:btntxt(windowanim)"></span></a><br>'+
+		'<span class="note">Disable window animations if this text is blurry.</span></div></div></div>');
+		var dialog = makewindow('Preferences',content,{id:type, icn:type, btn:'OK', closefunc:settingsmodel.saveprefs});
+		ko.applyBindings(settingsmodel,dialog[0]);
 	}
 }
 
@@ -2176,9 +2517,10 @@ function sendjob(options){
 	if(model.currentid()) senddata.id = model.currentid();
 	if(model.parentid()) senddata.parentid = model.parentid();
 	var nodeinfo = {};
-	$.each(leafnodes,function(name,node){ if(node.ensinfo) nodeinfo[name] = node.ensinfo; });
+	$.each(leafnodes,function(name,node){ if(node.ensinfo&&node.type!='ancestral') nodeinfo[name] = node.ensinfo; });
 	if(!$.isEmptyObject(nodeinfo)) senddata.nodeinfo = nodeinfo;
 	if(!$.isEmptyObject(model.ensinfo())) senddata.ensinfo = model.ensinfo();
+	if(model.hiddenlen()) senddata.visiblecols = model.visiblecols();
 	
 	optdata.success = function(data){ //job sent to server. Show status.
 		alignbtn.html('Done');
@@ -2196,13 +2538,6 @@ function sendjob(options){
 			ajaxobj.abort();
 	}},2000);
 	return false; //for onclick
-}
-
-//get sorted items from serverdata
-function sortdata(data,key){
-	var itemsarray = typeof(data)=='string'? serverdata[data]() : data;
-	itemsarray.sort(function(a,b){ return a[key]&&b[key]? a[key]()>b[key]()?1:-1 : 0; });
-	return itemsarray;
 }
 
 //import ensembl data
@@ -2387,8 +2722,10 @@ function checkfiles(filearr,action){
 
 //get an analysis datafile from local server
 function getfile(filepath,importbtn,jobid){
-	var importbtn = $(importbtn);
-	importbtn.html('<img class="icn" src="img/spinner.gif">');
+	if(importbtn){
+		importbtn = $(importbtn);
+		importbtn.html('<img class="icn" src="img/spinner.gif">');
+	} else importbtn = false;
     filescontent = {};
     var trycount = 0;
 	var filefunc = function(){
@@ -2398,18 +2735,19 @@ function getfile(filepath,importbtn,jobid){
     	dataType: "text",
     	success: function(data){
     		filescontent[filepath.substr(filepath.lastIndexOf('/')+1)] = data;
-        	setTimeout(function(){ parseimport({source:'import',id:jobid,importbtn:importbtn}) }, 100)
+        	setTimeout(function(){ parseimport({source:'import',id:jobid,importbtn:importbtn}) }, 100);
+        	if(settingsmodel.keepid){ localStorage.currentid = JSON.stringify(jobid); localStorage.currentfile = JSON.stringify(filepath); }
     	},
     	error: function(xhrobj,status,msg){ 
         	if(!msg && status!="abort"){ //no response. try again
         		if(trycount<1){ trycount++; setTimeout(filefunc,1000); return; }
         		else{ msg = 'No response from server' }
         	}
-        	importbtn.html('Failed <span class="svgicon" style="margin-right:-10px" title="'+msg+'">'+svgicon('info')+'</span>');
+        	if(importbtn) importbtn.html('Failed <span class="svgicon" style="margin-right:-10px" title="'+msg+'">'+svgicon('info')+'</span>');
         }
 	  });
 	}
-	communicate('getimportmeta',{id:jobid},{success:filefunc,saveto:'importdata'}); //get metadata, then importfile
+	communicate('getimportmeta',{id:jobid},{success:filefunc,saveto:'importdata'}); //first get metadata, then imported file
 }
 
 //sequence row highlight
@@ -2439,7 +2777,7 @@ $(function(){
 	
 	$("#borderDrag").draggable({ //make sequence/tree width resizable
 		axis: "x", 
-		containment: [150,0,900,0],
+		containment: [150,0,1000,0],
 		start: function(e, dragger){ draggerpos = dragger.offset.left-$namedragger.offset().left+5; },
 		drag: function(event, dragger) {
 			$left.css('width',dragger.offset.left);
@@ -2472,9 +2810,9 @@ $(function(){
 	 var startpos = {x:e.pageX,y:e.pageY};
 	 if(e.pageY>dom.seqwindow.offset().top+30){ //in seq area
 	  if(e.which==1 && e.target.tagName!='DIV'){ //act on left mouse button, outside of selections
-		var curid = lastselectionid;
-		dom.seqwindow.mousemove(function(evt){ selectionsize(evt,curid,startpos); });
-		dom.seqwindow.mouseup(function(e){
+	  	activeid = '';
+		dom.seqwindow.mousemove(function(evt){ selectionsize(evt,'',startpos); });
+		dom.seqwindow.one('mouseup',function(e){
 	 		if(e.pageY>dom.seqwindow.offset().top+30){ //in seq area
 	  			if(e.which==1 && e.target.tagName!='DIV' && $("div.canvasmenu").length==0){ //outside of selections
 	  				var dx = e.pageX-startpos.x; var dy = e.pageY-startpos.y; 
@@ -2486,13 +2824,11 @@ $(function(){
 	  				}
 	  			}
 	 		}
-	 		dom.seqwindow.unbind('mouseup');
 		});
 	  }
+	 $('html').one('mouseup',function(){ dom.seqwindow.unbind('mousemove'); if(toolsmodel.prunemode) toolsmodel.markLeafs(); });
 	 }
 	});
-	
-	$("html").mouseup(function(){ dom.seqwindow.unbind('mousemove'); });
 	
 	var icon = function(type,title){
 		title = title? 'title="'+title+'"' : '';
@@ -2551,15 +2887,15 @@ $(function(){
 	  			}
 	  	  	}	
 		}else{ //right-click outside of selection
-			var maskmenu = data[icon('mask')+' Mask all sequences'] = {click:function(e){maskdata(e,'maskall')},submenu:{}};
-	  		maskmenu['submenu'][icon('unmask')+' Unmask all sequences'] = function(e){maskdata(e,'unmaskall')};
-			if(model.hiddenlen()) data[icon('expand')+' Reveal '+model.hiddenlen()+' hidden columns'] = function(e){hidecolumns(e,'revealall')};
+			data[icon('unmask')+' Unmask all sequences'] = function(e){maskdata(e,'unmaskall')};
+			if(model.hiddenlen()) data[icon('expand')+' Reveal '+model.hiddenlen()+' hidden columns'] = function(){showcolumns('all','hidetip')};
 			if(maskcount) data[icon('collapse')+' Collapse '+maskcount+' masked columns'] = function(e){maskdata(e,'hidemaskedcols')};
+			if(selectcount) data[icon('selections')+' Clear '+selectcount+' selections'] = function(e){e.stopPropagation(); hidetooltip(); clearselection()};
 		}
 	   	tooltip(e,'',{data:data}); //show menu
 	}); //seq. area right-click
 		
-	$.ajax({ //get initial datafile
+	/*$.ajax({ //get initial datafile
 		type: "GET",
 		url: "data/"+model.startfile,
     	dataType: "text",
@@ -2568,8 +2904,15 @@ $(function(){
     		filescontent[model.startfile] = data;
     		parseimport({source:'localread'});
     	}
-	});
+	});*/
 	
-	communicate('alignstatus','','jobdata'); //get data from server
-	communicate('getmeta','','analysdata');
+	// Load startup data //
+	communicate('alignstatus','','jobdata');
+	console.log(localStorage);
+	settingsmodel.loadprefs();
+	if(settingsmodel.onlaunch()=='import dialog'){ dialog('import'); }
+	else if(settingsmodel.keepid && localStorage.currentid && localStorage.currentfile){
+		getfile(JSON.parse(localStorage.currentfile),'',JSON.parse(localStorage.currentid));
+	} else { communicate('getmeta','','analysdata'); }
+	if(settingsmodel.keepzoom() && localStorage.zoomlevel) model.zoomlevel(JSON.parse(localStorage.zoomlevel));
 });

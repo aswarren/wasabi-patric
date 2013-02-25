@@ -36,14 +36,19 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
             if url.endswith("/"):
                 url += "index.html"
             url = url[1:] #remove leading /
+            if('?' in url):
+                urlarr = url.split('?')
+                url = urlarr[0]
+                params = urlarr[1]
+            else: params = ''
             
-            if url.endswith(".html") | url.endswith(".css") | url.endswith(".js"): #send as html page/text
+            if('download' in params): ctype = 'application/octet-stream' #for download button
+            elif('text' in params): ctype = 'text/plain'
+            elif url.endswith(".html") | url.endswith(".css") | url.endswith(".js"): #send text for html page
                 ctype = 'text/css' if url.endswith(".css") else 'text/javascript' if url.endswith(".js") else 'text/html'
-                f = open(apath(url)) #no path limits: any file can be requested by the browser
-            else: #or send as file (default)
+            else: #send file for html page
                 ctype = 'image' if url.endswith(".jpg")|url.endswith(".png")|url.endswith(".gif") else 'application/octet-stream'
-                f = open(apath(url), 'rb')
-            if(string.find(url,'export/') > -1): ctype = 'application/octet-stream' #force download for file links
+            f = open(apath(url)) if 'text' in ctype else open(apath(url),'rb') #NOTE: query url is unsanitized
             filecontent = f.read()
             self.send_response(200)
             self.send_header("Content-Type", ctype)
@@ -82,24 +87,28 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     self.send_header("Content-Length", len(urlfile))
                     self.end_headers()
                     self.wfile.write(urlfile)
-            elif (action == 'startalign') or (action == 'save'): #start new alignment job
+            elif (action == 'startalign') or (action == 'save'): #start new alignment job and/or save files to libary
                 jobid = ''.join(random.choice(string.letters + string.digits) for i in range(10))
                 parentid = form.getvalue('parentid','')
                 currentid = form.getvalue('id','')
-                writemode = form.getvalue('writemode','')
+                writemode = form.getvalue('writemode','') #infer target path in library
                 if (writemode=='sibling' and parentid): jobid = parentid+'/children/'+jobid
                 elif (writemode=='child' and currentid): jobid = currentid+'/children/'+jobid
                 elif (writemode=='overwrite' and currentid): jobid = currentid 
                 odir = 'analyses/'+jobid+'/'
                 if not os.path.exists(odir): os.makedirs(odir)
                 name = form.getvalue('name','')
-                metapath = apath(odir+'meta.txt') #info for library
-                importmetapath = apath(odir+'importmeta.txt') #info for results import
-                importdata = {"id":jobid}
+                metapath = apath(odir+'meta.txt') #metainfo for library
+                importmetapath = apath(odir+'importmeta.txt') #metainfo for results import
+                importdata = json.load(open(importmetapath)) if os.path.isfile(importmetapath) else {"id":jobid}
+                idnames = form.getvalue('idnames','')
+                if(idnames): importdata["idnames"] = json.loads(idnames)
                 ensinfo = form.getvalue('ensinfo','')
                 if(ensinfo): importdata["ensinfo"] = json.loads(ensinfo)
                 nodeinfo = form.getvalue('nodeinfo','')
                 if(nodeinfo): importdata["nodeinfo"] = json.loads(nodeinfo)
+                visiblecols = form.getvalue('visiblecols','')
+                if(visiblecols): importdata["visiblecols"] = json.loads(visiblecols)
                 starttime = str(time.time())
                 if action == 'startalign':
                     alignerpath = apath('aligners/prank/prank') #use supplied aligner binary, global install as a fallback
@@ -125,29 +134,19 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     detach_flag = 0x00000008 if os.name is 'nt' else 0 #for windows
                     popen = subprocess.Popen(params, stdout=logfile, stderr=logfile, creationflags=detach_flag, close_fds=True)
                     status = popen.poll()
-                    status = str(status) if status else 'running' #0=finished;None=running
+                    status = str(status) if status else 'running' #0=finished, None=running
                     logline = ' '
                     jobs[jobid] = {'popen':popen,'starttime':starttime,'name':name,'aligner':aligner,'parameters':','.join(params[1:]),'logpath':logpath,'metapath':metapath,'order':str(len(jobs)),'type':jobtype}
                     jobdata = {"id":jobid,"name":name,"aligner":aligner,"parameters":",".join(params[1:]),"infile":inpath,"logfile":logpath,"starttime":starttime}
-                    idnames = form.getvalue('idnames','')
-                    if(idnames): importdata["idnames"] = json.loads(idnames)
-                    metafile = open(metapath, 'w')
-                    json.dump(jobdata,metafile) #write data to file
                     jobdata["status"] = status
                     jobdata["lasttime"] = starttime
-                    importmetafile = open(importmetapath, 'w')
-                    json.dump(importdata,importmetafile)
-                    sendOK(self)
-                    self.wfile.write('{"id":"'+jobid+'"}');
-                elif action == 'save': #write files to library dir
+                elif action == 'save': #write files to library path
                     savepath = apath(odir+'saved.xml')
                     savefile = open(savepath, 'w')
                     savefile.write(form.getvalue('file',''))
                     if(name): #save files as new library item
                         source = form.getvalue('source','')
                         jobdata = {"id":jobid, "name":name, "source":source, "starttime":starttime}
-                        importmetafile = open(importmetapath, 'w')
-                        json.dump(importdata,importmetafile)
                     elif os.path.isfile(metapath): #overwrite existing item
                         jobdata = json.load(open(metapath))
                     else:
@@ -155,10 +154,12 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                         return
                     jobdata["savetime"] = starttime
                     jobdata["outfile"] = odir+"saved.xml"
-                    metafile = open(metapath, 'w')
-                    json.dump(jobdata,metafile)
-                    sendOK(self)
-                    self.wfile.write('{"id":"'+jobid+'"}')
+                metafile = open(metapath, 'w') #write metadata to files
+                json.dump(jobdata,metafile)
+                importmetafile = open(importmetapath, 'w')
+                json.dump(importdata,importmetafile)
+                sendOK(self)
+                self.wfile.write('{"id":"'+jobid+'"}')
             elif action == 'alignstatus': #send status or terminate registered job(s)
                 getid = form.getvalue('id','')
                 sendstr = ''
@@ -265,6 +266,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     return
                 sendstr = ''
                 for item in os.listdir(path):
+                    if item.startswith("."): continue
                     itempath = apath(path+'/'+item)
                     fsize = "folder" if os.path.isdir(itempath) else os.path.getsize(itempath)
                     sendstr += item+':'+str(fsize)+'|'

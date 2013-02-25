@@ -38,15 +38,17 @@ Smits.Common = {
 	},
 	//Process nodetree lengths & levels, add metadata. Used (rescoped) in fileparsing classes.
 	processNodes : function(tree){
-		var node = tree || this.root; //'this' will be a data object from ...Parse()
+		var node = tree || this.root || ''; //'this' will be a data object from ...Parse()
+		if(!node) return;
 		for(var i in node.children){
 			var child = node.children[i];
 			if(model.dendogram()) child.len = 1;
 			child.lenFromRoot = Smits.Common.roundFloat(node.lenFromRoot+child.len); //node total length from root
+			child.level = node.level+1;
 			if(child.level > this.mLevel) this.mLevel = child.level; //record max values
 			if(child.lenFromRoot > this.mLenFromRoot) this.mLenFromRoot = child.lenFromRoot;
 			if(child.children.length) this.processNodes(child);
-			else if(this.nodeinfo[child.name]){ //add external metadata
+			else if(this.nodeinfo && this.nodeinfo[child.name]){ //add external metadata
 				$.each(this.nodeinfo[child.name],function(k,v){ child[k] = v; });
 				if(child.species) child.displayname = child.species;
 			}				
@@ -57,8 +59,8 @@ Smits.Common = {
 
 /// Master data object. Contains tree data, SVG canvas and rendered tree objects. ///
 Smits.PhyloCanvas = function(){
-	return function(inputData, namesWidth, canvasWidth, canvasHeight, type){
-		/* Privileged Methods */
+	return function(inputData){
+		/* Privileged functions */
 		this.scale = function(multiplier){
 			this.svg.svg.scale(multiplier);
 		};
@@ -68,15 +70,16 @@ Smits.PhyloCanvas = function(){
 				return serialize.serializeToString(svg.svg.canvas);
 			} else { return false; }
 		};
-		this.refresh = function(options){
+		this.refresh = function(options){ //re-render tree canvas
 			if(!options) options = {};
 			var self = this;
 			self.svg.svg1.clear(); self.svg.svg2.clear();
-			visiblerows.removeAll();
+			model.visiblerows.removeAll(); leafnodes = {};
 			self.phylogram = new Smits.PhyloCanvas.Render.Phylogram(self.svg, self.data);
+			model.leafcount(self.data.root.leafCount); model.nodecount(self.data.root.nodeCount);
 			if(!options.treeonly) redraw(options);
 		}
-		this.loaddata = function(dataobj){
+		this.loaddata = function(dataobj){ //turn data file to object-tree
 			leafnodes = {}; Smits.Common.nodeIdIncrement = 0;
 			if(typeof(dataobj)!='object') dataobj = {newick: dataobj};
 			if(dataobj.phyloxml) this.data = new Smits.PhyloCanvas.PhyloxmlParse(dataobj);
@@ -87,16 +90,15 @@ Smits.PhyloCanvas = function(){
 	
 		/* CONSTRUCTOR */
 		// Process dataset - assume newick format
-		leafnodes = {}; visiblerows.removeAll();
+		leafnodes = {}; model.visiblerows.removeAll();
 		if(inputData){
 			if(typeof(inputData)=='string') inputData = {newick: inputData};
 			if(inputData.phyloxml) this.data = new Smits.PhyloCanvas.PhyloxmlParse(inputData);
 			else if(inputData.newick) this.data = new Smits.PhyloCanvas.NewickParse(inputData);
 			else  dialog('error','Tree data in wrong format.<br>Cannot draw a tree.');
 		} else dialog('error','No input data to draw a tree.');
-		this.svg = new Smits.PhyloCanvas.Render.SVG(namesWidth, canvasWidth, canvasHeight);
-		
-		/* FACTORY */
+		this.svg = new Smits.PhyloCanvas.Render.SVG();
+		//build stuff to tree canvas
 		this.phylogram = new Smits.PhyloCanvas.Render.Phylogram(this.svg, this.data);	
 	}	
 }();
@@ -104,12 +106,14 @@ Smits.PhyloCanvas = function(){
 /// Node Class. Allows tree data objects to be traversed across children ///
 Smits.PhyloCanvas.Node = function(){
 	return function(parentNode){
-		// initiate node object
+		//initiate node object
 		this.id = ++Smits.Common.nodeIdIncrement;
 		this.level = parentNode? parentNode.level+1 : 0;
+		this.nwlevel = 0;
 		this.len = 0.0001;
 		this.lenFromRoot = 0;
 		this.name = 'Node';
+		this.active = false;
 		this.type = '';
 		this.hidden = false;
 		this.canvx = 0;
@@ -119,7 +123,7 @@ Smits.PhyloCanvas.Node = function(){
 		this.children = [];
 		this.parent = parentNode || false;
 
-		//Calculation cache
+		//Calculations cache
 		this.leafCount = 0;
 		this.nodeCount = 0;
 		this.visibleLeafCount = 0;
@@ -162,18 +166,16 @@ Smits.PhyloCanvas.Node.prototype = {
 			if(this.parent.visibleChildCount<2){ //if only 1 visible child
 				this.getVisibleParentBranch().hidden = true;
 			}
-			else { this.hidden = true; }
+			else{ this.hidden = true; }
 		}
-		else { this.hidden = false; }
+		else{ this.hidden = false; }
 		this.getRoot().countChildren(); //recount hidden/visible nodes
 	},
 	
 	showSubtree : function(ancestral,hide){ //show all descendants or show/hide all ancestral leaves
 		for (var i in this.children) {
 			var child = this.children[i];
-			if(child.children && child.children.length > 0){
-				child.showSubtree(ancestral,hide);
-			}
+			if(child.children && child.children.length > 0) child.showSubtree(ancestral,hide);
 			else if((ancestral && child.type=='ancestral')||(!ancestral && child.type!='ancestral')){
 				child.hidden = hide? true : false;
 			}			
@@ -192,28 +194,17 @@ Smits.PhyloCanvas.Node.prototype = {
 		return this.midBranchPosition;
 	},
 	
-	highlight : function(){
+	highlight : function(mark){
 		var node = this;
-		node.active = true;
-		if(node.type=='stem'){
-			setTimeout(function(){ node.svgEl.attr({'fill':'orange','fill-opacity':1}) },100);
-		}
-		else setTimeout(function(){ node.svgEl.attr({'fill':'orange'}); },100);
-		
-	},
-	
-	unhighlight : function(){
-		var node = this;
-		node.active = false;
-		if(node.type=='stem'){
-			setTimeout(function(){ node.svgEl.attr({'fill':'red','fill-opacity':0}) },100);
-		}
-		else setTimeout(function(){ node.svgEl.attr({'fill':'black'}) },100);
+		node.active = typeof(mark)!='undefined'? mark : !node.active;
+		if(node.active){ var fill='orange', op=1, txtfill='orange'; } else { var fill='red', op=0, txtfill=''; }
+		if(node.type=='stem') node.svgEl.attr({'fill':fill,'fill-opacity':op});
+		else{ node.svgEl.attr({'fill':'black'}); $(node.svgEl.node.firstChild).attr('fill',txtfill); }
 	},
 	
 	removeAnc : function(){ //strip all ancestral seq. leaves
 		var carr = this.children, anci;
-		for (var i in carr){
+		for(var i in carr){
 			if(carr[i].children.length > 0) carr[i].removeAnc(); 
 			else if(carr[i].type=='ancestral') anci = i;
 		}
@@ -252,30 +243,29 @@ Smits.PhyloCanvas.Node.prototype = {
 		return nodearr;
 	},
 	
-	getRoot : function(mark){
+	getRoot : function(flag){
 		var node = this;
-		while(node.parent){ node = node.parent; if(mark) node.altered = true; }
-		return node;
+		var root = treesvg.data.root;
+		if(flag && node!=root){
+			while(node.parent){ node = node.parent; node.altered = true; }
+			model.treealtered(true);
+		}
+		return root;
 	},
 	
-	setRoot : function(new_root,root,norealign){
-		var root = root || this.getRoot();
-		for(var prop in new_root){ //swap old root with the new one
-			if(typeof(new_root[prop])!='function') root[prop] = new_root[prop];
-		}
-		for(var child in new_root.children) new_root.children[child].parent = root;
+	setRoot : function(new_root,norealign){
 		new_root.parent.children = []; new_root.parent = false;
-		root.countChildren();
-		root.id = 1;
-		root.name = 'Root';
-		root.len = 0.0001;
-		root.parent = false;
+		new_root.name = 'Root'; new_root.id = 1; new_root.len = 0.0001;
+		new_root.level = 1; new_root.lenFromRoot = 0;
 		if(!norealign){
-			root.altered = true; //mark tree for realignment
+			new_root.altered = true; //mark tree for realignment
 			if(!model.treealtered()) model.treealtered(true);
 		}
-		root.countChildren();
-		return root;
+		new_root.countChildren(); //update children count
+		treesvg.data.root = new_root;
+		treesvg.data.mLevel = treesvg.data.mLenFromRoot = 0;
+		treesvg.data.processNodes(); //update levels/lengths
+		return treesvg.data.root;
 	},
 	
 	reRoot : function(dist){ //place node as tree outgroup
@@ -290,8 +280,8 @@ Smits.PhyloCanvas.Node.prototype = {
 		
 	  	//construct new root node
 		newnode = new_root = new Smits.PhyloCanvas.Node();
-		newnode.name = 'Root';
-		newnode.len = root.len; 
+		//newnode.name = 'Root';
+		//newnode.len = root.len; 
 		newnode.children[0] = node;
 		newnode.children[0].len = dist;
 		pnode = node.parent;
@@ -322,7 +312,7 @@ Smits.PhyloCanvas.Node.prototype = {
 		} else { //multifurcating node. Just remove old root.
 			pnode.children.splice(i,1);
 		}
-		node.setRoot(new_root,root);
+		node.setRoot(new_root);
 		model.addundo({name:'Reroot',type:'tree',data:node.getRoot().write('tags'),info:'Tree rerooted.'});
 	},
 	
@@ -361,19 +351,19 @@ Smits.PhyloCanvas.Node.prototype = {
 		}
 		newnode.children.push(node); node.parent = newnode;
 		newnode.children.push(target); target.parent = newnode;
-		node.setRoot(placeholder.children[0],root);
+		node.setRoot(placeholder.children[0]);
 		node.getRoot('mark');
 		model.addundo({name:'Move node',type:'tree',data:node.getRoot().write('tags'),info:'Tree node "'+this.name+'" was attached to node "'+target.name+'".'});
 	},
 	
-	remove : function(skipundo){ //remove node+descendants from tree
+	remove : function(skipundo,skipcount){ //remove node+descendants from tree
 		var root = this.getRoot().removeAnc();
 		if(!model.treesnapshot) model.treesnapshot = root.write('tags');
 		var node = this;
 		if (node == root || node.parent == root) return;
-		node.getRoot('mark'); //flag path to root
+		node.getRoot('flag'); //flag path to root
 
-		var placeholder = new Smits.PhyloCanvas.Node();
+		var placeholder = new Smits.PhyloCanvas.Node(); //attach root to temp. buffer node
 		placeholder.children.push(root); root.parent = placeholder;
 
 		var pnode = node.parent, i;
@@ -390,19 +380,22 @@ Smits.PhyloCanvas.Node.prototype = {
 			for (i in pnode.children) if (pnode.children[i] == node) break;
 			pnode.children.splice(i,1);
 		}
-
-		if(!skipundo){ //not a step of node move
+		
+		root.parent = false;
+		if(!skipcount) root.countChildren();
+		if(!skipundo){ //add undo, unless part of node move/batch removing
 			delete leafnodes[node.name];
-			model.nodecount(root.nodeCount); model.leafcount(root.leafcount);
+			model.nodecount(root.nodeCount); model.leafcount(root.leafCount);
 			model.addundo({name:'Remove node',type:'tree',data:root.write('tags'),info:'Node "'+node.name+'" was removed from the tree.'});
 		}
 	},
 	
 	prune : function(){ //keep node+subtree, remove the rest
-		var node = this;
-		node.setRoot(node,'','norealign');
-		model.addundo({name:'Prune',type:'tree',data:node.getRoot().write('tags'),info:'Subtree of node "'+node.name+'" was pruned from the tree.'});
-		setTimeout(function(){console.log(leafnodes)},5000);
+		var node = this; var nodename = node.name;
+		var root = node.getRoot().removeAnc();
+		if(!model.treesnapshot) model.treesnapshot = root.write('tags');
+		node.setRoot(node,'norealign');
+		model.addundo({name:'Prune subtree',type:'tree',data:node.getRoot().write('tags'),info:'Subtree of node "'+nodename+'" was pruned from main tree.'});
 	},
 	
 	write : function(tags,noparents,nameids){ //convert nodetree to newick string
@@ -788,7 +781,8 @@ Smits.PhyloCanvas.Render.Parameters = {
 	onClickAction : function(params) {
 		if(params.node.edgeCircleHighlight) params.node.edgeCircleHighlight.hide();		
 		if(params.textEl){ //click on leaf label => popup menu
-			params.textEl.attr({ fill: 'red' });
+			if(toolsmodel.prunemode){ params.node.highlight(); return; } //toggle highlight
+			params.textEl.attr({fill:'red'});
 			var node = params.node;
 			node.active = true;
 			var menudata = {};
@@ -810,7 +804,7 @@ Smits.PhyloCanvas.Render.Parameters = {
     			if(!$.isEmptyObject(infomenu)) menudata['<span class="svgicon" title="View metadata">'+svgicon('info')+'</span>Metadata'] = {submenu:infomenu};
     		}
 			menudata['<span class="svgicon" title="Hide node and its sequence">'+svgicon('hide')+'</span>Hide leaf'] = function(){ node.hideToggle(); refresh(); };
-			menudata['<span class="svgicon" title="Graft this node to another branch in the tree">'+svgicon('move')+'</span>Move leaf'] = function(){ setTimeout(function(){ node.highlight() },50); movenode('',node,'tspan'); };
+			menudata['<span class="svgicon" title="Graft this node to another branch in the tree">'+svgicon('move')+'</span>Move leaf'] = function(){ setTimeout(function(){ node.highlight(true) },50); movenode('',node,'tspan'); };
     		menudata['<span class="svgicon" title="Place this node as the tree outgroup">'+svgicon('root')+'</span>Place root here'] = function(){ node.reRoot(); refresh(); };
     		menudata['<span class="svgicon" title="Remove this node from the tree">'+svgicon('trash')+'</span>Remove leaf'] = function(){ node.remove(); refresh(); };
     		hidetooltip();
@@ -885,13 +879,11 @@ Smits.PhyloCanvas.Render.Circle = function(){
 	}
 }();
 
+//create SVG canvas elements on first tree render
 Smits.PhyloCanvas.Render.SVG = function(){
-	var namesWidth, canvasSize;
-	return function(snamesWidth, canvasWidth, canvasHeight){
+	return function(){
 		/* CONSTRUCTOR */
-		namesWidth = snamesWidth;
-		this.canvasSize = [canvasWidth, canvasHeight];
-		
+		this.canvasSize = [50,100]; //will be updated in render.phylogram()
 		this.svg1 = Raphael('tree', "100%", "100%");
 		this.svg2 = Raphael('names', "100%", "100%");
 		$(this.svg2.canvas).css('font-size',model.fontsize()+'px');
@@ -901,7 +893,7 @@ Smits.PhyloCanvas.Render.SVG = function(){
 }();
 
 Smits.PhyloCanvas.Render.SVG.prototype = {
-	//Funcitons for svg object (includes multiple svgs)
+	//Functions for svg object (includes multiple svgs)
 	render : function(){
 		var instructs = this.phylogramObject.getDrawInstructs();
 		for (var i = 0; i < instructs.length; i++) {
@@ -949,7 +941,7 @@ Smits.PhyloCanvas.Render.SVG.prototype = {
 /// Draw a new tree. Input: tree data object + svg canvas ///
 Smits.PhyloCanvas.Render.Phylogram = function(){
 	var svg, data, sParams = Smits.PhyloCanvas.Render.Parameters.Rectangular,
-	canvasX, canvasY, scaleX, scaleY, maxBranch,
+	canvasWidth, canvasHeight, scaleX, scaleY, maxBranch,
 	minHeightBetweenLeaves, firstBranch = true, absoluteY = 0,
 	x1, x2, y1, y2, positionX, positionY,
 	bufferX, paddingX, paddingY, labelsHold = [], namecounter = 0;
@@ -1050,7 +1042,8 @@ Smits.PhyloCanvas.Render.Phylogram = function(){
 			});
 			circle[0].data("node",node);	
 		} else { //leafs
-			if(node.hidden){ return []; }
+			if(node.hidden){ if(node.type!='ancestral') leafnodes[node.name] = node; return []; }
+			else leafnodes[node.name] = node;
 			
 			x1 = positionX;
 			x2 = Smits.Common.roundFloat(positionX + (scaleX * node.len), 4);
@@ -1072,7 +1065,7 @@ Smits.PhyloCanvas.Render.Phylogram = function(){
 			}
 			
 			if(node.name){
-				visiblerows.push(node.name);
+				model.visiblerows.push(node.name);
 				var attr = {};
 				// leaf label
 				if(node.style) attr = Smits.PhyloCanvas.Render.Style.getStyle(node.style, 'text');
@@ -1129,12 +1122,7 @@ Smits.PhyloCanvas.Render.Phylogram = function(){
 		svg.draw(new Smits.PhyloCanvas.Render.Text((x1+x2)/2, y-8, sParams.showScaleBar));
 	};
 		
-	return function(inputSvg, inputData){
-		/* Privileged Methods */
-		this.getCanvasSize = function(){
-			return [canvasX, canvasY];
-		};		
-		
+	return function(inputSvg, inputData){		
 		svg = inputSvg;
 		data = inputData;
 		
@@ -1142,15 +1130,15 @@ Smits.PhyloCanvas.Render.Phylogram = function(){
 		var node = data.root;
 		node.countChildren();
 		seqcount = node.visibleLeafCount; //tree height estimation.
-		if(seqcount==0){
+		if(!seqcount){
 			dialog('error','Found no leafs to show when rendering the tree canvas.<br>Probably a data parsing error.');
 			console.log(node); return;
 		}
-		visiblerows.removeAll(); //reset list of visible sequences
+		model.visiblerows.removeAll(); //reset list of visible sequences
 		
-		canvasX = $("#treewrap").width();			// Treecanvas Width
-		canvasY = seqcount*model.boxh();		// Treecanvas Height
-		svg.canvasSize = [canvasX,canvasY];
+		canvasWidth = $("#treewrap").width(); //update canvas dimensions
+		canvasHeight = seqcount*model.boxh();
+		svg.canvasSize = [canvasWidth,canvasHeight];
 		
 		bufferX = sParams.bufferX;
 		paddingX = sParams.paddingX;
@@ -1160,12 +1148,12 @@ Smits.PhyloCanvas.Render.Phylogram = function(){
 		absoluteY = paddingY;
 		firstBranch = true;
 		
-		scaleX = Math.round((canvasX - bufferX - paddingX) / data.mLenFromRoot);
+		scaleX = Math.round((canvasWidth - bufferX - paddingX) / data.mLenFromRoot);
 		scaleY = model.boxh(); //height of row
 		if(scaleY < minHeightBetweenLeaves) scaleY = minHeightBetweenLeaves;
-		maxBranch = Math.round(canvasX - bufferX); //pixel width of tree drawing area
+		maxBranch = Math.round(canvasWidth - bufferX); //pixel width of tree drawing area
 		
-		calculateNodePositions(node, paddingX);
+		calculateNodePositions(node, paddingX); //build up tree canvas
 		
 		// Draw Scale Bar
 		if(sParams.showScaleBar) drawScaleBar();

@@ -64,7 +64,7 @@ function mCustomScrollbar(){
 				axis: "x", 
 				containment: [$horizontalDragger_container.offset().left, 0, $horizontalDragger_container.offset().left+draggerXMax], 
 				drag: function(){ ScrollX(false,'drag') }, 
-				stop: function() { horizontalDraggerRelease(); }
+				stop: function() { $horizontalDragger.removeClass('pressed') }
 			});
 			
 			$horizontalDragger_container.off('click').click(function(e){ //scroll line click => scroll to clicked spot
@@ -136,7 +136,7 @@ function mCustomScrollbar(){
 				axis: "y", 
 				containment: [0,$verticalDragger_container.offset().top,0,$verticalDragger_container.offset().top+draggerYMax], 
 				drag: function(){ ScrollY(false,'drag') }, 
-				stop: function() { verticalDraggerRelease() }
+				stop: function() { $verticalDragger.removeClass('pressed') }
 			});
 				
 			$verticalDragger_container.off('click').click(function(e) {
@@ -168,9 +168,8 @@ function mCustomScrollbar(){
 			$scrollUpBtn.css("display","none");
 		}
 		
-		/// do scrolling (set CSS values) ///
 		var scrollXTimer;
-		//horizontal scrolling ([specific point to scroll],[scroll source (debug)])
+		// do horizontal scrolling ([specific point to scroll],[scroll source (debug)]) //
 		function ScrollX(shift,id){
 			var draggerX = $horizontalDragger.position().left;
 			var posX = parseInt(dom.wrap.css('left'));
@@ -185,11 +184,12 @@ function mCustomScrollbar(){
 			if(target>0){ target = 0; }
 			else if(Math.abs(target)>totalContentWidth-visibleWidth){ target = visibleWidth-totalContentWidth; }
 			clearTimeout(scrollXTimer);
-			scrollXTimer = setTimeout(function(){ makeImage('x:'+target);},100);
-			dom.wrap.stop().animate({left: target}, animSpeed, easeType);
+			scrollXTimer = setTimeout(function(){ makeImage('x:'+target) },100);
+			//dom.wrap.stop().animate({left: target}, animSpeed, easeType);
+			dom.wrap.css('left',target);
 		}
 		var scrollYTimer;
-		//vertical scrolling 
+		// do vertical scrolling //
 		function ScrollY(shift,id){
 			var draggerY = $verticalDragger.position().top;
 			var marginY = parseInt(dom.seq.css('margin-top'));
@@ -208,10 +208,13 @@ function mCustomScrollbar(){
 			clearTimeout(scrollYTimer);
 			scrollYTimer = setTimeout(function(){ makeImage('y:'+target);},100);
 			if(target>0){ target = 0; } else if(Math.abs(target)>totalContentHeight-visibleHeight){ target = visibleHeight-totalContentHeight; }
-			dom.seq.stop().animate({marginTop: target}, animSpeed, easeType);
-			$("#treewrap").stop().animate({top: target}, animSpeed, easeType);
+			//dom.seq.stop().animate({marginTop: target}, animSpeed, easeType);
+			//dom.treewrap.stop().animate({top: target}, animSpeed, easeType);
+			dom.seq.css('margin-top',target);
+			dom.treewrap.css('top',target);
 			$.each([$("#namelabel"),$("#treemenu"),$("#namemenu")],function(m,menu){ //move tree tooltips
-				if(menu.length) menu.stop().animate({top:menu.position().top+target-marginY}, animSpeed, easeType);
+				//if(menu.length) menu.stop().animate({top:menu.position().top+target-marginY}, animSpeed, easeType);
+				if(menu.length) menu.css('top',menu.position().top+target-marginY);
 			});
 		}
 				
@@ -236,30 +239,10 @@ function mCustomScrollbar(){
 			});
 		}
 		
-		$horizontalDragger.mouseup(function(){
-			horizontalDraggerRelease();
-		}).mousedown(function(){
-			horizontalDraggerPress();
-		});
-		$verticalDragger.mouseup(function(){
-			verticalDraggerRelease();
-		}).mousedown(function(){
-			verticalDraggerPress();
-		});
-
-		function horizontalDraggerPress(){
-			$horizontalDragger.addClass("dragger_pressed");
-		}
-		function verticalDraggerPress(){
-			$verticalDragger.addClass("dragger_pressed");
-		}
-
-		function horizontalDraggerRelease(){
-			$horizontalDragger.removeClass("dragger_pressed");
-		}
-		function verticalDraggerRelease(){
-			$verticalDragger.removeClass("dragger_pressed");
-		}
+		var pressaction = function(){ $(this).addClass('pressed') };
+		var releaseaction = function(){ $(this).removeClass('pressed') };
+		$horizontalDragger.mousedown(pressaction).mouseup(releaseaction);
+		$verticalDragger.mousedown(pressaction).mouseup(releaseaction);
 	}
 	//recalculate scrollbars after window resize
 	var resizeTimer

@@ -11,7 +11,7 @@
 	<script type="text/javascript" src="js/jquery-ui-1.9.2.js"></script>
 	<script type="text/javascript" src="js/jquery.easing.js"></script>
 	<script type="text/javascript" src="js/jquery.mousewheel.js"></script>
-	<script type="text/javascript" src="js/knockout.js"></script>
+	<script type="text/javascript" src="js/knockout-2.2.1.js"></script>
 	<script type="text/javascript" src="js/knockout.mapping.js"></script>
 	<script type="text/javascript" src="js/mCustomScrollbar.js"></script>
 	<script type="text/javascript" src="js/raphael.js"></script>
@@ -25,27 +25,38 @@
 	
 	<img style="position:absolute;top:27px;right:150px;" src="img/wasabi_logo.png">
 	
-	  <div class="buttonblock" style="left:0">
-	     <div style="display:inline-block;position:relative;margin-left:10px;">
+	  <div class="buttonblock" style="left:5px">
 	  		<a id="file" class="button" onclick="togglemenu('filemenu')"><img src="img/file.png" class="before"> File</a>
 	      	<div id="filewrap" class="buttonmenuwrap" style="top:52px">
 	      		<div class="menuborder"></div>
-	      		<div id="filemenu" class="buttonmenu"><ul data-bind="foreach:filemenu"><li data-bind="click:$parent.fileclick"><span data-bind="html:$data+' <img src=\'img/'+$data+'.png\'>'"></span></li></ul></div>
+	      		<div id="filemenu" class="buttonmenu"><ul data-bind="foreach:filemenu"><li data-bind="click:function(d){$parent.menuclick('filemenu',d)}">
+	      			<span data-bind="html:$data+'<img class=\'right\' src=\'img/'+$data+'.png\'>'"></span>
+	      		</li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
-	   	  </div>
 	   </div>
 	   
-	   <div class="buttonblock" style="left:5%;margin-left:55px">
+	   <div class="buttonblock" style="left:6%;margin-left:40px">
 	  		<a id="run" class="button" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before">Analyses</a>
 	      	<div id="runwrap" class="buttonmenuwrap" style="top:52px">
 	      		<div class="menuborder"></div>
-	      		<div id="runmenu" class="buttonmenu"><ul data-bind="foreach:runmenu"><li data-bind="click:$parent.runclick"><span data-bind="text:n"></span></li></ul></div>
+	      		<div id="runmenu" class="buttonmenu"><ul data-bind="foreach:runmenu"><li data-bind="click:function(d){$parent.menuclick('runmenu',d.act)}">
+	      			<span data-bind="html:txt+'<img class=\'right\' src=\'img/'+icn+'.png\' title=\''+inf+'\'>'"></span>
+	      		</li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
 	   </div>
 	   
-	  <div class="buttonblock" style="left:15%;margin-left:120px">
+	   <div class="buttonblock" style="left:10%;margin-left:125px;padding:0 10px">
+	  		<a id="run" class="button" onclick="togglemenu('toolsmenu')"><img src="img/tools.png" class="before">Tools</a>
+	      	<div id="toolswrap" class="buttonmenuwrap" style="top:52px">
+	      		<div class="menuborder"></div>
+	      		<div id="toolsmenu" class="buttonmenu"><ul data-bind="foreach:toolsmenu"><li data-bind="click:function(d){$parent.menuclick('toolsmenu',d.act)},visible:icn!='tree'||$parent.treesource()"><span data-bind="html:txt+'<img class=\'right\' src=\'img/'+icn+'.png\' title=\''+inf+'\'>'"></span></li></ul></div>
+	      		<div class="topshadow"></div>
+	        </div>
+	   </div>
+	   
+	  <div class="buttonblock" style="left:16%;margin-left:183px">
 	    <div id="zoombtns" style="display:inline-block;position:relative;">
 	      <a id="zoomout" onclick="zoomout();" class="button zoom">-</a> <a id="zoomin" onclick="zoomin();" class="button zoom">+</a>
 	      <div id="zoomperc" style="top:-10px;font-weight:bold;display:none" class="toptext" data-bind="text:zoomperc"></div>
@@ -53,17 +64,20 @@
 	    </div>
 	  </div>
 	  
-	  <div class="buttonblock" style="left:18%;margin-left:180px">
-	    <a id="undobtn" class="button left" data-bind="html:svgicon('undo'),click:undo,css:{disabled:!activeundo.data()||activeundo.undone()}"></a><a id="historybtn" class="button middle" onclick="togglemenu('undomenu')" data-bind="foreach:{data:activeundo.name,afterRender:marginadd,beforeRemove:waitremove}"><span data-bind="fadeText:name"></span></a><a id="undobtn" class="button right" data-bind="html:svgicon('redo'),click:redo,css:{disabled:!activeundo.data()||!activeundo.undone()}"></a>
+	  <div class="buttonblock" style="left:19%;margin-left:230px">
+	    <a id="undobtn" class="button left" data-bind="html:svgicon('undo'),click:undo,css:{disabled:!activeundo.data()||activeundo.undone()}"></a><a id="historybtn" class="button middle" onclick="togglemenu('undomenu')" data-bind="attr:{title:activeundo.data().name}">
+	    <span style="margin-top:0" data-bind="visible:!activeundo.data()">History</span>
+	    <!-- ko foreach:{data:activeundo.name,afterRender:marginadd,beforeRemove:waitremove} --><span data-bind="fadeText:name"></span><!-- /ko -->
+	    </a><a id="undobtn" class="button right" data-bind="html:svgicon('redo'),click:redo,css:{disabled:!activeundo.data()||!activeundo.undone()}"></a>
 	    <div class="toptext">Actions history</div>
 	    <div id="undowrap" class="buttonmenuwrap">
 	      	<div class="menuborder"></div>
-	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:{data:undostack,afterAdd:slideadd,beforeRemove:slideremove}"><li data-bind="click:$parent.selectundo,style:{backgroundColor:$data==$parent.activeundo.data()?'#ffcc66':''}"><span data-bind="html:'<img src=\'img/'+type+'.png\' class=\'icn\'> '+name+'<span class=\'right\' title=\''+info+'\'>'+svgicon('info')+'</span>'"></span></li></ul></div>
+	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:{data:undostack,afterAdd:slideadd,beforeRemove:slideremove}"><li data-bind="click:$parent.selectundo,style:{backgroundColor:$data==$parent.activeundo.data()?'#ffcc66':''}"><span data-bind="html:name+'<img class=\'right\' title=\''+info+'\' src=\'img/'+type+'.png\'>'"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
 	  </div>
 	  
-	  <div class="buttonblock" style="left:21%;margin-left:300px" data-bind="fadevisible:statusbtn()!=''">
+	  <div class="buttonblock" style="left:23%;margin-left:350px" data-bind="fadevisible:statusbtn()!=''">
 	  	<a id="statusbtn" onclick="dialog('jobstatus')" class="button square" data-bind="html:statusbtn"></a>
 	    <div class="toptext">Notifications</div>  
 	  </div>
@@ -85,7 +99,7 @@
 		<div id="bottomfade"></div><div id="topfade"></div>
 		<div id="borderDrag">&#x22EE;</div>
 	</div>
-	<div id="namesborderDragline"><div id="namesborderDrag">&#x22EE;</div></div>
+	<div id="namesborderDragline" class="draggerline"><div id="namesborderDrag" class="dragger">&#x22EE;</div></div>
 	<div id="right">
 	  <div id="seqwindow">
 	    <div id="wrap">
@@ -96,8 +110,8 @@
 	    <img id="rightshadow" src="img/shadow_right.png">
 	    <img id="spinner" style="height:36px" src="img/spinner.gif">
 	  </div>
-	  <div id="horizontalDragger"><div class="scrollBtn scrollLeftBtn">&lt;</div><div class="dragger"></div><div class="scrollBtn scrollRightBtn">&gt;</div></div>
-	  <div id="verticalDragger"><div class="scrollBtn scrollUpBtn">&#x2227;</div><div class="dragger"></div><div class="scrollBtn scrollDownBtn">&#x2228;</div></div>
+	  <div id="horizontalDragger" class="draggerline"><div class="scrollBtn scrollLeftBtn">&lt;</div><div class="dragger"></div><div class="scrollBtn scrollRightBtn">&gt;</div></div>
+	  <div id="verticalDragger" class="draggerline vertical"><div class="scrollBtn scrollUpBtn">&#x2227;</div><div class="dragger"></div><div class="scrollBtn scrollDownBtn">&#x2228;</div></div>
 	  <div id="treebin"><div></div></div>
 	</div>
 	<div id="namelabel"><span></span></div>
