@@ -271,7 +271,6 @@ Smits.PhyloCanvas.Node.prototype = {
 	reRoot : function(dist){ //place node as tree outgroup
 		var i, plen, nodelen, pnode, newnode, gpnode, ggpnode, new_root;
 		var root = this.getRoot().removeAnc();
-		if(!model.treesnapshot) model.treesnapshot = root.write('tags');
 		var node = this;
 		if (node == root) return root;
 		if (isNaN(dist) || dist<0 || dist>node.len) dist = node.len/2.0;
@@ -316,18 +315,26 @@ Smits.PhyloCanvas.Node.prototype = {
 		model.addundo({name:'Reroot',type:'tree',data:node.getRoot().write('tags'),info:'Tree rerooted.'});
 	},
 	
-	swap : function(){ //swap children
-		if(!model.treesnapshot) model.treesnapshot = this.getRoot().write('tags');
+	ladderize : function(skipundo){
+		if(!this.children.length) return;
+		var node = this;
+		if(node.children[0].visibleLeafCount<node.children[node.children.length-1].visibleLeafCount) node.swap('skipundo');
+		for(var i in node.children){
+			if(node.children[i].visibleLeafCount>2) node.children[i].ladderize('skipundo');
+		}
+		if(!skipundo) model.addundo({name:'Ladderise',type:'tree',data:this.getRoot().write('tags'),info:'The subtree of "'+node.name+'" was reordered.'});
+	},
+	
+	swap : function(skipundo){ //swap children
 		var swapnode = this.children[0];
 		this.children[0] = this.children[this.children.length-1];
 		this.children[this.children.length-1] = swapnode;
-		model.addundo({name:'Swap nodes',type:'tree',data:this.getRoot().write('tags'),info:'Tree node "'+swapnode.name+'" swapped places with its sibling.'});
+		if(!skipundo) model.addundo({name:'Swap nodes',type:'tree',data:this.getRoot().write('tags'),info:'Tree node "'+swapnode.name+'" swapped places with its sibling.'});
 	},
 	
 	//Move: prune the subtree descending from this node and regragh it to the edge between targetnode and its parent
 	move : function(target){
 		var root = this.getRoot().removeAnc();
-		if(!model.treesnapshot) model.treesnapshot = root.write('tags');
 		var node = this;
 		if (node === root || node.parent === root) return false; //can't move root
 		for (var r = target; r.parent; r = r.parent){
@@ -358,7 +365,6 @@ Smits.PhyloCanvas.Node.prototype = {
 	
 	remove : function(skipundo,skipcount){ //remove node+descendants from tree
 		var root = this.getRoot().removeAnc();
-		if(!model.treesnapshot) model.treesnapshot = root.write('tags');
 		var node = this;
 		if (node == root || node.parent == root) return;
 		node.getRoot('flag'); //flag path to root
@@ -393,7 +399,6 @@ Smits.PhyloCanvas.Node.prototype = {
 	prune : function(){ //keep node+subtree, remove the rest
 		var node = this; var nodename = node.name;
 		var root = node.getRoot().removeAnc();
-		if(!model.treesnapshot) model.treesnapshot = root.write('tags');
 		node.setRoot(node,'norealign');
 		model.addundo({name:'Prune subtree',type:'tree',data:node.getRoot().write('tags'),info:'Subtree of node "'+nodename+'" was pruned from main tree.'});
 	},
@@ -1027,7 +1032,7 @@ Smits.PhyloCanvas.Render.Phylogram = function(){
 					circle[0].toFront(); 
 					circle[0].attr({'fill-opacity':'1'});
 					var menutitle = node.name+( $('#right').hasClass('dragmode')? '' : '. <span class="note">'+tipnote+'</span>' );
-					tooltip(e, menutitle, {target:node, tooltip:"#treemenu", arrow:'left'});
+					tooltip(e, menutitle, {target:node, tooltip:"#treemenu", arrow:'left', style:'black'});
 				}
 			});
 			circle[0].mouseout(function(){ 
@@ -1035,7 +1040,7 @@ Smits.PhyloCanvas.Render.Phylogram = function(){
 			}});
 			circle[0].click(function(e){
 				if(!$('#treemenu .tooltipcontent').text()){
-					tooltip(e,node.name,{target:node, data:data, svg:svg, tooltip:$("#treemenu")});
+					tooltip(e,node.name,{target:node, data:data, svg:svg, tooltip:$("#treemenu"), style:'black'});
 					e.stopPropagation(); hidetooltip("#treemenu",'exclude');
 					$('html').one('click',function(){ circle[0].attr({'fill-opacity':'0'}); hidetooltip("#treemenu"); });
 				}

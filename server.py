@@ -65,7 +65,10 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
         try:
             form = cgi.FieldStorage(fp = self.rfile, headers = self.headers, environ={'REQUEST_METHOD':'POST'})
             action = form.getvalue('action')
-            if action == 'echofile':  #echo uploaded file back
+            if action == 'checkstatus': #send confirmation
+                sendOK(self)
+                self.wfile.write("OK");
+            elif action == 'echofile':  #echo uploaded file back
                 sendOK(self)
                 self.wfile.write(form.getvalue('upfile'))
             elif action == 'geturl':  #download & send remote files
@@ -115,7 +118,7 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     if not os.path.isfile(alignerpath): alignerpath = 'prank'
                     aligner = 'PRANK:'+alignerpath
                     jobtype = 'Prank alignment';
-                    params = [alignerpath,'-d='+apath(odir+'input.fas'),'-o='+apath(odir+'out'),'-prunetree']
+                    params = [alignerpath,'-d='+apath(odir+'input.fas'),'-o='+apath(odir+'out'),'-prunetree','-showxml','-showevents']
                     inpath = apath(odir+'input.fas')
                     fafile = open(inpath, 'w')
                     fafile.write(form.getvalue('fasta',''))
@@ -123,7 +126,6 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                         treefile = open(apath(odir+'input.tree'), 'w')
                         treefile.write(form.getvalue('newick',''))
                         params.append('-t='+apath(odir+'input.tree'))
-                    params.append('-showxml')
                     if 'F' in form: params.append('+F')
                     if 'e' in form: params.append('-e')
                     if 'dots' in form: params.append('-dots')
@@ -193,7 +195,8 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                             else: lastline = logline
                         if status is not 'running': #job finished, mark endtime
                             odir = 'analyses/'+jobid+'/'
-                            if os.path.isfile(odir+'out.2.xml'): outpath = odir+'out.2.xml'
+                            if os.path.isfile(odir+'out.best.xml'): outpath = odir+'out.best.xml'
+                            elif os.path.isfile(odir+'out.2.xml'): outpath = odir+'out.2.xml'
                             elif os.path.isfile(odir+'out.1.xml'): outpath = odir+'out.1.xml'
                             elif os.path.isfile(odir+'out.0.xml'): outpath = odir+'out.0.xml'
                             else: outpath = ''
@@ -300,7 +303,6 @@ class LocalServer(BaseHTTPRequestHandler): #class to handle local server/browser
                     curtime = time.time()
                     fileage = (curtime-filetime)/86400
                     if(fileage > 2): os.remove(apath('exports/'+filename))
-                
         except IOError as e:
             if hasattr(e, 'reason'):
                 self.send_error(501,'URL does not exist: %s' % e.reason)

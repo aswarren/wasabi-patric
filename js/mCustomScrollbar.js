@@ -110,7 +110,8 @@ function mCustomScrollbar(){
 			
 		///  vertical scrolling  ///
 		var visibleHeight = dom.seqwindow.innerHeight()-$("#ruler").outerHeight()-parseInt($("#seqwrap").css('margin-top'));
-		var totalContentHeight = $("#seq").height()+10;
+		//var totalContentHeight = $("#seq").height()+10;
+		var totalContentHeight = model.visiblerows().length ? model.visiblerows().length*model.boxh()+10 : model.leafcount()*model.boxh()+10;
 		if(totalContentHeight>visibleHeight){ //enable scrollbar if content is long
 			$verticalDragger.css("display","block");
 			if(reloadType!="resize" && totalContentHeight!=dom.seqwindow.data("contentHeight")){

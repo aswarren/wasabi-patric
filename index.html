@@ -3,7 +3,7 @@
 <head>
 	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
 	<meta http-equiv="content-script-type" content="text/javascript" />
-	<title>was@bi</title>
+	<title>Wasabi</title>
 	<link rel="shortcut icon" href="img/icon.png" />
 	<link rel="apple-touch-icon" href="img/icon_big.png" />
 	<link href="style.css" rel="stylesheet" type="text/css" media="screen" />
@@ -19,39 +19,34 @@
 	<script type="text/javascript" src="js/icons.js"></script>
 	<script type="text/javascript" src="js/script.js"></script>
 </head>
-<body>
+<body data-bind="css:{hiddentop:settingsmodel.hidebar}">
   <div id="page">
-	<div id="top">
-	
-	<img style="position:absolute;top:27px;right:150px;" src="img/wasabi_logo.png">
-	
-	  <div class="buttonblock" style="left:5px">
-	  		<a id="file" class="button" onclick="togglemenu('filemenu')"><img src="img/file.png" class="before"> File</a>
-	      	<div id="filewrap" class="buttonmenuwrap" style="top:52px">
+    <noscript><div><img src="img/warning.png">You have disabled Javascript in your web browser.<br>Please turn on Javascript to use this web application.</div></noscript>
+	<div id="top" class="away" data-bind="css:{hidden:settingsmodel.hidebar}">
+	  <div class="title" data-bind="visible:!offline()&&(seqsource()||treesource())"><input type="text" class="static noselect" data-bind="value:exportmodel.savename,valueUpdate:'afterkeydown',style:{width:exportmodel.savename().length*9+'px'}" onmousedown="if(!$(this).hasClass('editable')) event.preventDefault();" onclick="titlemenu(event,this)" onblur="if(model.currentid()) communicate('writemeta',{id:model.currentid(),key:'name',value:this.value}); $(this).removeClass('editable');" autocomplete="off"><span class="note" data-bind="fadevisible:unsaved" style="display:none">(unsaved)</span></div>
+	  
+	  <div id="topcollapse" class="bottomarr" title="Click to (un)collapse the menubar" onclick="toggletop()"><span>&#x25B2;</span></div>
+	  
+	  <div class="buttonblock" style="left:15px">
+	  		<a id="file" class="button" onclick="togglemenu('filemenu')"><img src="img/file.png" class="before">Data</a>
+	      	<div id="filewrap" class="buttonmenuwrap">
 	      		<div class="menuborder"></div>
-	      		<div id="filemenu" class="buttonmenu"><ul data-bind="foreach:filemenu"><li data-bind="click:function(d){$parent.menuclick('filemenu',d)}">
+	      		<div id="filemenu" class="buttonmenu" style="margin-top:-150px"><ul data-bind="foreach:filemenu"><li data-bind="click:function(d){$parent.menuclick('filemenu',d)}">
 	      			<span data-bind="html:$data+'<img class=\'right\' src=\'img/'+$data+'.png\'>'"></span>
 	      		</li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
 	   </div>
 	   
-	   <div class="buttonblock" style="left:6%;margin-left:40px">
-	  		<a id="run" class="button" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before">Analyses</a>
-	      	<div id="runwrap" class="buttonmenuwrap" style="top:52px">
+	   <div class="buttonblock" style="left:8%;margin-left:60px;padding:0 10px;">
+	  		<a id="run" class="button" onclick="togglemenu('runmenu')"><img src="img/run.png" class="before">Tools</a>
+	      	<div id="runwrap" class="buttonmenuwrap">
 	      		<div class="menuborder"></div>
-	      		<div id="runmenu" class="buttonmenu"><ul data-bind="foreach:runmenu"><li data-bind="click:function(d){$parent.menuclick('runmenu',d.act)}">
+	      		<div id="runmenu" class="buttonmenu" style="margin-top:-35px" data-bind="visible:!offline()||seqsource()||treesource()">
+	      		<ul data-bind="foreach:runmenu, visible:!offline()&&seqsource()"><li data-bind="click:function(d){$parent.menuclick('runmenu',d.act)}">
 	      			<span data-bind="html:txt+'<img class=\'right\' src=\'img/'+icn+'.png\' title=\''+inf+'\'>'"></span>
-	      		</li></ul></div>
-	      		<div class="topshadow"></div>
-	        </div>
-	   </div>
-	   
-	   <div class="buttonblock" style="left:10%;margin-left:125px;padding:0 10px">
-	  		<a id="run" class="button" onclick="togglemenu('toolsmenu')"><img src="img/tools.png" class="before">Tools</a>
-	      	<div id="toolswrap" class="buttonmenuwrap" style="top:52px">
-	      		<div class="menuborder"></div>
-	      		<div id="toolsmenu" class="buttonmenu"><ul data-bind="foreach:toolsmenu"><li data-bind="click:function(d){$parent.menuclick('toolsmenu',d.act)},visible:icn!='tree'||$parent.treesource()"><span data-bind="html:txt+'<img class=\'right\' src=\'img/'+icn+'.png\' title=\''+inf+'\'>'"></span></li></ul></div>
+	      		</li></ul>
+	      		<ul style="border-top:1px solid #999" data-bind="foreach:toolsmenu,visible:toolsmenu().length"><li data-bind="click:function(d){$parent.menuclick('toolsmenu',d.act)},visible:icn!='tree'||$parent.treesource()"><span data-bind="html:txt+'<img class=\'right\' src=\'img/'+icn+'.png\' title=\''+inf+'\'>'"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
 	   </div>
@@ -59,7 +54,7 @@
 	  <div class="buttonblock" style="left:16%;margin-left:183px">
 	    <div id="zoombtns" style="display:inline-block;position:relative;">
 	      <a id="zoomout" onclick="zoomout();" class="button zoom">-</a> <a id="zoomin" onclick="zoomin();" class="button zoom">+</a>
-	      <div id="zoomperc" style="top:-10px;font-weight:bold;display:none" class="toptext" data-bind="text:zoomperc"></div>
+	      <div class="toptext zoomperc" data-bind="text:zoomperc"></div>
 	      <div class="toptext">Zoom</div>
 	    </div>
 	  </div>
@@ -70,38 +65,44 @@
 	    <!-- ko foreach:{data:activeundo.name,afterRender:marginadd,beforeRemove:waitremove} --><span data-bind="fadeText:name"></span><!-- /ko -->
 	    </a><a id="undobtn" class="button right" data-bind="html:svgicon('redo'),click:redo,css:{disabled:!activeundo.data()||!activeundo.undone()}"></a>
 	    <div class="toptext">Actions history</div>
-	    <div id="undowrap" class="buttonmenuwrap">
+	    <div id="undowrap" class="buttonmenuwrap lower">
 	      	<div class="menuborder"></div>
-	      	<div id="undomenu" class="buttonmenu"><ul data-bind="foreach:{data:undostack,afterAdd:slideadd,beforeRemove:slideremove}"><li data-bind="click:$parent.selectundo,style:{backgroundColor:$data==$parent.activeundo.data()?'#ffcc66':''}"><span data-bind="html:name+'<img class=\'right\' title=\''+info+'\' src=\'img/'+type+'.png\'>'"></span></li></ul></div>
+	      	<div id="undomenu" class="buttonmenu"  style="margin-top:-35px"><ul data-bind="foreach:{data:undostack,afterAdd:slideadd,beforeRemove:slideremove}"><li data-bind="click:$parent.selectundo,style:{backgroundColor:$data==$parent.activeundo.data()?'#ffcc66':''}"><span data-bind="html:name+'<img class=\'right\' title=\''+info+'\' src=\'img/'+type+'.png\'>'"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	        </div>
 	  </div>
 	  
-	  <div class="buttonblock" style="left:23%;margin-left:350px" data-bind="fadevisible:statusbtn()!=''">
+	  <div class="buttonblock" style="left:23%;margin-left:350px;z-index:2;display:none" data-bind="fadevisible:statusbtn()!=''">
 	  	<a id="statusbtn" onclick="dialog('jobstatus')" class="button square" data-bind="html:statusbtn"></a>
 	    <div class="toptext">Notifications</div>  
+	  </div>
+	  
+	  <div id="logo" class="buttonblock" onclick="dialog('about')" title="Click for more information">
+	  	<img src="img/wasabi_logo.png">
+	    <div class="toptext">About Wasabi</div>  
 	  </div>
 	  
 	  <div class="buttonblock" style="right:10px">
 	  		<a id="selectmode" class="button" onclick="togglemenu('selectmodemenu')"><span data-bind="text:selmode"></span><span class="after" data-bind="html:svgicon(selmode())"></span></a>
 	      	<div class="toptext">Selection mode</div>
-	      	<div id="selectmodewrap" class="buttonmenuwrap">
+	      	<div id="selectmodewrap" class="buttonmenuwrap lower">
 	      		<div class="menuborder"></div>
-	      		<div id="selectmodemenu" class="buttonmenu"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode,style:{backgroundColor:$data==$parent.selmode()?'#ffcc66':''}"><span data-bind="text:$data"></span><span class="right" data-bind="html:svgicon($data)"></span></li></ul></div>
+	      		<div id="selectmodemenu" class="buttonmenu"  style="margin-top:-130px"><ul data-bind="foreach:selmodes"><li data-bind="click:$parent.setmode,style:{backgroundColor:$data==$parent.selmode()?'#ffcc66':''}"><span data-bind="text:$data"></span><span class="right" data-bind="html:svgicon($data)"></span></li></ul></div>
 	      		<div class="topshadow"></div>
 	      	</div>
 	   </div>
 	   
 	</div><!--top buttons-->
 	<div id="left">
-		<div id="notree">No tree data</div>
+		<div id="notree" data-bind="fadevisible:!treesource()">No tree data</div>
 		<div id="treewrap"><div id="tree"></div><div id="names"></div></div>
 		<div id="bottomfade"></div><div id="topfade"></div>
 		<div id="borderDrag">&#x22EE;</div>
 	</div>
-	<div id="namesborderDragline" class="draggerline"><div id="namesborderDrag" class="dragger">&#x22EE;</div></div>
+	<div id="namesborderDragline" class="draggerline" data-bind="fadevisible:treesource()||seqsource()"><div id="namesborderDrag" class="dragger">&#x22EE;</div></div>
 	<div id="right">
 	  <div id="seqwindow">
+		<div id="noseq" data-bind="fadevisible:!seqsource()">No sequence data</div>
 	    <div id="wrap">
 	      <div id="ruler"></div>
 	      <div id="seqwrap"><div id="seq"><div id="rborder" class="rowborder"></div></div></div>
@@ -115,7 +116,10 @@
 	  <div id="treebin"><div></div></div>
 	</div>
 	<div id="namelabel"><span></span></div>
-	<div id="bottom"></div>
+	<div id="bottom">
+		Andres Veidenberg <span style="color:#ccc">|</span> University of Helsinki<br>
+		<a onclick="dialog('about');return false;" title="Click for more info">About Wasabi</a>
+	</div>
 	
 	<div id="treemenu" class="tooltip leftarrow"><div class="arrow"></div><div class="tooltiptitle"></div><div class="tooltipcontentwrap hidden" style="overflow:visible"><div class="tooltipcontent"></div></div></div>
   	<div id="backfade"></div>

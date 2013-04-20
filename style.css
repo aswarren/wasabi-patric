@@ -1,13 +1,69 @@
 * { margin: 0; padding: 0; }
+
+.notransition, .notransition * { /* animations turn-off switch */
+  -webkit-transition: none !important;
+  transition: none !important;
+}
 	
-body { 
+body{ 
 	background:url("img/bg_beige2.jpg") repeat scroll left top white;
 	font: 14px arial, sans-serif;
 }
 
-html body div.opaque{
-	opacity: 1;
+noscript div{
+	position: absolute;
+	top: 30%;
+	left: 30%;
+	padding: 10px 10px 10px 40px;
+	border: 3px solid red;
+	border-radius: 5px;
+	background: white;
+	box-shadow: 0 2px 0 white, 0 1px 3px #666 inset;
+	font-size: 20px;
+	z-index: 100;
 }
+noscript div img{
+	margin: 0 10px -15px -30px;
+}
+
+#top div.title{
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 25px;
+	vertical-align: middle;
+	text-align: center;
+	text-shadow: 0 1px 0 white;
+	-webkit-transition: opacity 0.5s;
+	transition: opacity 0.5s;
+}
+
+#top .bottomarr{
+	position: absolute;
+	bottom: -2px;
+	left: 0;
+	width: 400px;
+	padding: 0;
+	height: 8px;
+	line-height: 5px;
+	color: #666;
+	cursor: pointer;
+	opacity: 0;
+	z-index: 2;
+	text-shadow: 0 1px 0 white;
+	-webkit-transition: opacity 0.2s;
+	transition: opacity 0.2s;
+}
+#top .bottomarr span{
+	display: inline-block;
+	position: absolute;
+	top: -4px;
+	left: 3px;
+}
+#top .bottomarr:hover{ opacity: 1; }
+
+html body div.opaque{ opacity: 1; }
 
 img{ display: inline-block; }
 
@@ -23,9 +79,7 @@ span.svgicon{
     width: 18px;
     height: 18px;
 }
-span.svgicon[onclick]{
-	cursor: pointer;
-}
+span.svgicon[onclick]{ cursor: pointer; }
 
 a, a:visited, a:active {
 	color: brown;
@@ -66,7 +120,10 @@ a.button span{ display: inline-block; }
 
 a.button.square{
 	border-radius: 3px;
-	padding: 6px 10px;
+	padding: 4px 8px;
+}
+#top a.button.square{
+	padding: 5px 9px;
 }
 
 a.button.small{
@@ -74,9 +131,11 @@ a.button.small{
 	margin: 0 5px;
 }
 
-a.button.red{
-	color: red;
-}
+a.button.red, span.red{ color: red; }
+span.orange{ color: orange; }
+span.green{ color: green; }
+
+a.button.disabled{ color: #888; }
 
 a.button:hover {
     background-color: #dadada;
@@ -84,9 +143,10 @@ a.button:hover {
     background: linear-gradient(#fcfcfc, #dcdcdc);
     box-shadow: 0 0 3px #bbb;
 }
-#top a.button:hover{ box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(255,255,255,.6); }
-
-a.button:active {
+#top a.button:hover{
+	box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(255,255,255,.6);
+}
+a.button:active{
     position: relative;
     top: 1px;
     background-color: #eee;
@@ -94,11 +154,41 @@ a.button:active {
     background: linear-gradient(#dadada, #fafafa);
 }
 
+span.buttongroup{
+	display: inline-block;
+}
+span.buttongroup a.button{
+	border-radius: 4px;
+	padding: 3px 5px;
+	margin: 0;
+}
+span.buttongroup a.button.pressed{
+	color: green;
+	background-color: #ddd;
+    background: -webkit-linear-gradient(#dadada, #ffffff);
+    background: linear-gradient(#dadada, #ffffff);
+}
+span.buttongroup a.button.left{
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+	border-right: none;
+}
+span.buttongroup a.button.middle{
+	border-radius: 0;
+	border-left: 2px groove white;
+	border-right: none;
+}
+span.buttongroup a.button.right{
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+	border-left: 2px groove white;
+}
+
 #top a.button .before{
     border-right: 2px groove white;
     display: inline-block;
     height: 25px;
-    margin: -6px 3px -10px -9px;
+    margin: -6px 6px -10px -9px;
     padding: 3px 3px 4px 0;
     width: 25px;
 }
@@ -107,7 +197,7 @@ a.button:active {
 	border-left: 2px groove white;
     border-radius: 0 18px 18px 0;
     display: inline-block;
-    height: 24px;
+    height: 23px;
     line-height: 15px;
     margin: -6px -8px -6px 6px;
     padding: 4px 0 5px 4px;
@@ -133,7 +223,7 @@ a.button:active {
 #top a.button.middle{
 	height: 26px;
 	line-height: 26px;
-	width: 70px;
+	width: 72px;
 	overflow: hidden;
 	border-left: 2px groove white;
 	border-right: none;
@@ -199,7 +289,24 @@ a.button:active {
 #top div.buttonblock{
 	position:absolute;
 	top:20px;
+	-webkit-transition: top 0.5s;
+	transition: top 0.5s;
 }
+
+#logo{
+	right: 150px;
+	cursor: pointer;
+	padding-top: 8px;
+}
+#logo .toptext{
+	opacity: 0;
+	cursor: pointer;
+	-webkit-transition: opacity ease 0.2s;
+	transition: opacity ease 0.2s;
+	text-align: left;
+	padding-left: 30px;
+}
+#logo:hover .toptext{ opacity: 1; }
 
 #zoombtns { vertical-align: bottom; }
 #top a.zoom {
@@ -213,6 +320,12 @@ a.button:active {
     vertical-align: bottom;
 }
 #top #zoomout{ padding-bottom: 11px; padding-top: 7px; }
+#zoombtns .zoomperc{
+	top: -10px;
+	font-weight: bold;
+	opacity: 0;
+}
+#zoombtns:hover .zoomperc{ opacity: 1 }
 
 a.button span.light{
 	width: 6px;
@@ -254,16 +367,24 @@ span.right{
 	white-space: nowrap;
 }
 div.buttonmenuwrap{
-	display: none;
+	opacity: 0;
 	position: absolute;
-	top:62px;
+	top: 52px;
 	left: 3px;
 	min-width: 100%;
 	white-space: nowrap;
 	overflow: hidden;
 	border-top: 1px solid #888;
-	z-index: 50;
+	-webkit-transition: opacity 0.1s ease 0.6s;
+	transition: opacity 0.1s ease 0.6s;
+	z-index: 70;
 }
+div.buttonmenuwrap.visible{
+	opacity: 1;
+	-webkit-transition: opacity 0.1s, top 0.5s;
+	transition: opacity 0.1s, top 0.5s;
+}
+div.buttonmenuwrap.lower{ top:62px; }
 div.buttonmenuwrap .topshadow{
 	position: absolute;
 	width: 90%;
@@ -287,8 +408,8 @@ div.buttonmenuwrap .buttonmenu{
 	border-bottom-right-radius: 3px;
 	border-bottom-left-radius: 3px;
 	box-shadow: 0 2px 3px -1px #666;
-	-webkit-transition: margin-top .8s cubic-bezier(0.2,1,0.2,1);
-	transition: margin-top .8s cubic-bezier(0.215, 0.610, 0.355, 1.000);
+	-webkit-transition: margin-top 0.7s;
+	transition: margin-top 0.7s;
 }
 div.buttonmenuwrap div.buttonmenu span.right{
 	margin-top: 3px;
@@ -319,9 +440,7 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
 	background-color: #99c5f6;
 }
 
-
-
-#page {
+#page{
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -330,15 +449,39 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
 	min-height: 600px;
 	min-width: 1000px;
 }
+/* collapsed/hidden menubar */
+body.mintop #top { height: 50px; }
+body.mintop #top.hidden { top: -40px; }
+body.mintop #top.hidden:hover { top: 0; }
+body.mintop #top div.title, body.mintop #top div.toptext, body.mintop #bottom{ opacity: 0; }
+body.mintop #top div.buttonblock{ top: -3px; }
+body.mintop #top #logo{ top: -6px; }
+body.mintop.hiddentop #top #logo{ top: -11px; }
+body.mintop #top div.buttonmenuwrap{ top: 47px; }
+body.mintop #left{ top: 90px; bottom: 28px; }
+body.mintop.hiddentop #left{ top: 50px; }
+body.mintop #namesborderDragline{ top: 70px; }
+body.mintop.hiddentop #namesborderDragline{ top: 30px; }
+body.mintop #right{ top: 60px; bottom: 10px; }
+body.mintop.hiddentop #right{ top: 20px; }
 
-#top {
+#top{
 	position: absolute;
 	top: 0;
 	left: 0;
 	right: 0;
 	height: 90px;
+	-webkit-transform: translateY(0px);
+	transform: translateY(0px);
 	background: url(img/bg_top.jpg) repeat-x bottom left;
 	box-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 -1px 0 0 rgba(255, 255, 255, 0.4) inset;
+	-webkit-transition: height 0.5s, top 0.3s, -webkit-transform 0.5s;
+	transition: height 0.5s, top 0.3s, transform 0.5s;
+	z-index: 50;
+}
+#top.away{
+	-webkit-transform: translateY(-100px);
+	transform: translateY(-100px);
 }
 .toptext{
 	position: absolute;
@@ -348,6 +491,8 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
 	text-shadow: 0 1px 0 white;
 	text-align: center;
 	cursor: default;
+	white-space: nowrap;
+	transition: opacity 0.5s;
 }
 
 #left {
@@ -357,6 +502,8 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
 	bottom: 68px;
 	width: 300px;
 	overflow: hidden;
+	-webkit-transition: top 0.5s, bottom 0.5s;
+	transition: top 0.5s, bottom 0.5s;
 }
 
  #treewrap{
@@ -407,7 +554,7 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
   	stroke: orange;
   }
   
-  #notree{
+  #notree, #noseq{
   	position: absolute;
   	display: none;
   	top: 40%;
@@ -523,6 +670,8 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
 	right: 0;
 	top: 100px;
 	bottom: 50px;
+	-webkit-transition: top 0.5s, bottom 0.5s;
+	transition: top 0.5s, bottom 0.5s;
 }
 
  #namesborderDragline{
@@ -532,6 +681,8 @@ div.buttonmenuwrap .buttonmenu ul li:hover{
  	width: 297px;
  	height: 3px;
  	box-shadow: 0 1px 2px #777 inset, 0 1px 0 white;
+ 	-webkit-transition: top 0.5s;
+ 	transition: top 0.5s;
  }
  #namesborderDragline.dragmode{ display: none }
  #namesborderDrag{
@@ -745,11 +896,13 @@ span.draggerline{
 	left: 20px;
 	right: 45px;
 	bottom: 3px;
+	display: none;
 }  
 #verticalDragger{
 	top: 20px;
 	right: 12px;
 	bottom: 40px;
+	display: none;
 }
   .dragger{
   	position: absolute;
@@ -813,18 +966,6 @@ span.draggerline{
   	bottom: -25px;
   	left: -5px;
   }
-  
-  
-  
-  
-#bottom{
-	position: absolute;
-	bottom: 0;
-	left: 0;
-	right: 0;
-	height: 50px;
-	margin-top: 100px;
-}
 
 div.tooltip, div.tooltip.black{
 	position: absolute;
@@ -835,12 +976,13 @@ div.tooltip, div.tooltip.black{
 	font: 15px Arial;
 	color: white;
 	padding: 1px;
-	z-index: 30;
+	z-index: 70;
 	white-space: nowrap;
 	opacity: 0;
 	-webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out;
     transition: opacity .2s ease-out, transform .2s ease-out;
 }
+#treemenu{ padding-bottom: 0; }
 div.tooltip.white{
 	background-color: rgba(250,250,250,0.98);
 	color: black;
@@ -921,6 +1063,9 @@ div.tooltip.opaque{
 	position: relative;
 	padding: 1px 5px;
 }
+div.tooltip.greytitle .tooltiptitle{
+	color: #888;
+}
 #treemenu .tooltiptitle{ padding-right: 2px; }
 #treemenu .tooltiptitle span.svgicon{
 	margin-left:5px;
@@ -983,11 +1128,25 @@ div.tooltip ul li:last-child{
 	border-bottom-left-radius: 2px;
 	border-bottom-right-radius: 2px;
 }
+div.tooltip.white ul li:first-child{
+	border-top-left-radius: 3px;
+	border-top-right-radius: 3px;
+}
+div.tooltip.white ul li:last-child{
+	border-bottom-left-radius: 3px;
+	border-bottom-right-radius: 3px;
+}
 div.tooltip ul li:hover{
 	text-shadow: 0 1px 3px #333;
 	color: white;                         
 	background: -webkit-linear-gradient(#6589ff,#1943f3);
 	background: linear-gradient(#6589ff,#1943f3);
+}
+div.tooltip.white ul li:hover{
+	text-shadow: 0 1px 3px #333;
+	color: white;                      
+	background: -webkit-linear-gradient(#88b2ff,#3e5dff);
+	background: linear-gradient(#88b2ff,#3e5dff);
 }
 div.tooltip ul li:hover div{ text-shadow: none; }
 div.tooltip ul li:hover svg.icon path, div.tooltip.white ul li div ul li:hover svg.icon path{ fill : white }
@@ -1125,7 +1284,7 @@ div.tooltip ul a { color: orange; }
 	position: absolute;
 	width: 100%;
 	height: 100%;
-	z-index: 32;
+	z-index: 58;
 	/*background-color: rgba(0,0,0,0.6);*/
 	background: -webkit-radial-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.9));
 	background: -o-radial-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.9));
@@ -1142,10 +1301,14 @@ div.zoomin{
 	-webkit-transition: opacity .4s ease-out, -webkit-transform .4s ease-out;
     transition: opacity .4s ease-out, transform .4s ease-out;
 }
-div.zoomed{
+div.zoomin.zoomed{
 	opacity: 1;
 	-webkit-transform: scale(1);
 	transform: scale(1);
+}
+div.zoomin.zoomed.finished{
+	-webkit-transform: none;
+	transform: none;
 }
 
 div.popupwrap{
@@ -1155,7 +1318,7 @@ div.popupwrap{
 	-webkit-perspective: 500px;
 	-moz-perspective: 700px;
 	perspective: 700px;
-	z-index: 33;
+	z-index: 60;
 }
 /*div.popupwrap div{ -moz-transform-style: preserve-3d; -moz-backface-visibility: hidden; }*/
 
@@ -1168,7 +1331,7 @@ div.popupwindow{
 	text-shadow: 0 1px 0 white;
 	border-radius: 5px;
 	white-space: nowrap;
-	z-index: 33;
+	z-index: 60;
 }
 div.popupwrap div.popupwindow{
 	top: 0;
@@ -1208,41 +1371,36 @@ div.popupwindow div.sectiontitle>img{
 	background-color: #f0f0f0;
 	top: -12px;
 }
-div.popupwindow div.sectiontxt{
+div.popupwindow div.sectiontext{
 	white-space: normal;
 	padding:0 10px 10px;
 }
-	
-
 
 div.side{
 	-webkit-backface-visibility: hidden;
-	-moz-backface-visibility: hidden;
 	backface-visibility: hidden;
     -webkit-transition: -webkit-transform 0.7s ease-in-out;
     transition: transform 0.7s ease-in-out;
 }
 
-div.back {
+div.back{
 	-webkit-transform: rotateY(-180deg);
 	transform: rotateY(-180deg);
-	z-index: 34;
+	z-index: 61;
 }
 div.flipped div.back{
 	-webkit-transform: rotateY(0deg);
 	transform: rotateY(0deg);
-	z-index: 35;
+	z-index: 62;
 }
 
-div.front {
-	-webkit-transform: rotateY(0deg);
-	transform: rotateY(0deg);
-	z-index: 35;
-}
-div.flipped div.front {
+div.front{ z-index: 62; }
+div.finished div.front{ backface-visibility: visible; }
+div.flipped div.front{
+	backface-visibility: hidden;
 	-webkit-transform: rotateY(180deg);
 	transform: rotateY(180deg);
-	z-index: 34;
+	z-index: 61;
 }
 
 img.closebtn{
@@ -1287,16 +1445,14 @@ div.windowcontent{
 	-webkit-overflow-scrolling: touch;
 }
 
-div.windowcontent ul li{ margin-top: 5px }
-
-div.windowcontent a.button.square{
-	border-radius: 3px;
-	padding: 4px 8px;
-}
-
 div.windowcontent ul{ margin-left: 20px; }
+div.windowcontent ul li{ margin-top: 5px; white-space: nowrap; }
 
-div.windowcontent div.btndiv{ text-align: center; margin-top: 5px; }
+div.windowcontent div.btndiv{
+	text-align: center;
+	margin: 10px 0 -10px;
+}
+div.btndiv a.button{ margin: 0 5px; }
 
 div.windowcontent span.cell{
 	display: inline-block;
@@ -1346,19 +1502,47 @@ input.transparent{
 	border-color: rgba(100,100,100,0.1);
 	width: 250px;
 }
-input.hidden{
+input.hidden, input.static, input.faded{
 	background: transparent;
 	border-color: transparent;
 	box-shadow: none;
 	width: 250px;
 }
-input.hidden:hover{ background: rgba(255,255,255,0.6); }
+input.faded, input.hidden:hover{ background: rgba(255,255,255,0.6); }
 #library input.transparent, #library input.hidden{
 	margin: 0;
 	font-size: 14px;
 	height: 18px;
 	padding-left: 3px;
 	width: 220px;
+}
+
+input.static{
+	font-size: 14px;
+	text-shadow: 0 1px 0 white;
+	cursor: default;
+}
+input.static.editable, #top input.static.editable{
+	background-color: white;
+	cursor: text;
+	border-color: #999;
+    box-shadow: 0 4px 8px #ddd inset, 0 1px 0 white;
+}
+#top input.static{
+	width: 200px;
+	max-width: 400px;
+	position: relative;
+	margin: 5px auto 0 auto;
+	cursor: pointer;
+	text-align: center;
+	-webkit-transition: border-color .4s, background-color .4s, opacity .4s;
+	transition: border-color .4s, background-color .4s, opacity .4s;
+}
+#top input.static:hover{
+	color: #f70;
+}
+#top input.static.editable:hover{
+	color: black;
 }
 
 input.url{
@@ -1411,6 +1595,7 @@ a.button.urladd:hover {
 span.icon{ margin-left:5px }
 
 img.icn{ height: 20px; vertical-align: bottom; }
+img.small{ height: 16px; }
 img.icn.action{ cursor: pointer; }
 img.icn.action:hover{ box-shadow: 0 1px 2px #999 inset; }
 
@@ -1452,12 +1637,13 @@ div.insidediv div.row{ padding: 10px 5px 5px; margin-bottom: 5px; }
 div.insidediv div.row.btnrow{ padding-right: 75px; }
 div.insidediv div.row.bottombtn{ padding-bottom: 10px; }
 div.insidediv div.row:nth-child(odd){ background-color: rgba(255,255,255,0.6); }
-div.insidediv div.row a.button{
+div.insidediv div.row>a.button, div.insidediv div.row>div>a.button{
 	position: absolute;
 	right: 15px;
 	margin-top: -3px;
     padding: 2px 6px 1px 6px;
 }
+div.insidediv div.row>span.buttongroup{ margin: -10px 0 0 5px; }
 div.insidediv div.row a.button:active{ top: auto; }
 div.insidediv div.row span.note{
 	padding-top: 5px;
@@ -1493,8 +1679,6 @@ div.insidediv.logdiv div.row:hover a.button, div.insidediv.logdiv div.row:hover 
 #jobstatus div.insidediv{
 	margin-bottom: 10px;
 }
-
-div.btndiv a{ margin-left: auto; }
 
 hr{ color:white; box-shadow:0 2px 6px #ddd; margin:5px 0; }
 
@@ -1637,4 +1821,25 @@ div.paper{
 	border: 1px solid #bbb;
 	box-shadow: 0 2px 5px #888;
 	font-family: monospace;
+}
+
+#about div.sectiontxt a.logo{
+	display: inline-block;
+	margin: 10px 0 0 10px;
+}
+#about a.logo img{
+	display: inline-block;
+	height: 100px;
+}
+
+#bottom{
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 40px;
+	text-align: center;
+	color: #dfac00;
+	-webkit-transition: opacity .5s;
+	transition: opacity .5s;
 }
