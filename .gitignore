@@ -1,3 +1,10 @@
 .DS_Store
 analyses/*
-.DS_Store
+aligners/*
+exports/*
+data
+backend_todo.txt
+prank_logo.png
+jalviewcolors.js
+webpage.pxm
+tmp*
