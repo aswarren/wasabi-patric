@@ -6,8 +6,8 @@ Andres Veidenberg 2011 (andres.veidenberg@helsinki.fi)
 var sequences = {}; //seq. data {name : [s,e,q]}
 var treesvg = {}; //phylogenetic nodetree
 var leafnodes = {}; //all leafnodes+visible ancestral leafnodes
-var colstep = 200; //sequence rendering tile size
-var rowstep = 60;
+var colstep = 1000; //sequence rendering tile size
+var rowstep = 100;
 var letters = '-_.:?!*=AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz'.split('');
 var alphabet = {protein:['A','R','N','D','C','Q','E','G','H','I','L','K','M','F','P','S','T','W','Y','V','B','Z','X'],
 dna:['A','T','G','C','N','X'], rna:['A','G','C','U','N','X'], gaps: ['-','_','.',':','?','!','*','='], codons:{TTT:'F', TTC:'F', TTA:'L', TTG:'L', CTT:'L', CTC:'L', CTA:'L', CTG:'L', ATT:'I', ATC:'I', ATA:'I', ATG:'M', GTT:'V', GTC:'V', GTA:'V', GTG:'V', TCT:'S', TCC:'S', TCA:'S', TCG:'S', CCT:'P',CCC:'P',CCA:'P',CCG:'P', ACT:'T',ACC:'T',ACA:'T',ACG:'T', GCT:'A', GCC:'A',GCA:'A', GCG:'A', TAT:'Y', TAC:'Y', TAA:'*',TAG:'*', CAT:'H',CAC:'H', CAA:'Q',CAG:'Q', AAT:'N',AAC:'N', AAA:'K',AAG:'K', GAT:'D', GAC:'D', GAA:'E',GAG:'E', TGT:'C',TGC:'C', TGA:'*', TGG:'W', CGT:'R',CGC:'R',CGA:'R',CGG:'R', AGT:'S',AGC:'S', AGA:'R', AGG:'R', GGT:'G', GGC:'G', GGA:'G', GGG:'G'}};
@@ -3327,7 +3327,7 @@ $(function(){
 	setTimeout(function(){ communicate('alignstatus','','jobdata'); communicate('getmeta','','analysdata'); },500);
 	
 	//Loading-up done. Show menubar.
-	setTimeout(function(){ $('#top').removeClass('away') }, 500);
+	setTimeout(function(){ $('#top').removeClass('away') }, 700);
 	
 	if(is.opera||(is.ie&&is.ver<9)) dialog('warning','This web application does not work well in Opera<br>or Internet Explorer web borwser.<br>'+
 	'Please use one of the <a onclick="dialog(\'about\')">recommended</a> browsers.');
