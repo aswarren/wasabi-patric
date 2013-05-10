@@ -3,6 +3,7 @@ Main script for Wasabi web app (for visualisation and analysis of multiple seque
 Andres Veidenberg 2011 (andres.veidenberg@helsinki.fi)
 */
 
+var currentversion = 130508; //local version of the Wasabi
 var sequences = {}; //seq. data {name : [s,e,q]}
 var treesvg = {}; //phylogenetic nodetree
 var leafnodes = {}; //all leafnodes+visible ancestral leafnodes
@@ -182,7 +183,7 @@ var myModel = function(){
 	var self = this;
 	//system status
 	self.offline = ko.observable(false);
-	self.version = {local:130409, remote:ko.observable(0), lastchange:''};
+	self.version = {local:currentversion, remote:ko.observable(0), lastchange:''};
 	//rendering parameters
 	self.zoomlevel = ko.observable(10);
 	self.zoomlevel.subscribe(function(val){ if(settingsmodel.keepzoom()) localStorage.zoomlevel = JSON.stringify(val); });
