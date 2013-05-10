@@ -3,7 +3,7 @@ Main script for Wasabi web app (for visualisation and analysis of multiple seque
 Andres Veidenberg 2011 (andres.veidenberg@helsinki.fi)
 */
 
-var currentversion = 130408; //local version of the Wasabi
+var currentversion = 130508; //local version of the Wasabi
 var sequences = {}; //seq. data {name : [s,e,q]}
 var treesvg = {}; //phylogenetic nodetree
 var leafnodes = {}; //all leafnodes+visible ancestral leafnodes
