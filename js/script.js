@@ -3169,7 +3169,7 @@ function translate(totype){
 
 //check for a new version of a backend service
 function checkversion(){
-	communicate('geturl',{fileurl:'http://prank-msa.googlecode.com/git/VERSION_HISTORY'},
+	communicate('geturl',{fileurl:'http://wasabi-app.googlecode.com/git/changelog'},
 	{success:function(changelog){
 		var startind = changelog.indexOf('v.')+2, endind = changelog.indexOf('v.',startind+1);
 		var firstblock = changelog.substring(startind,endind);
