@@ -13,6 +13,8 @@
 // │ Licensed under the MIT (http://www.opensource.org/licenses/mit-license.php) license. │ \\
 // └──────────────────────────────────────────────────────────────────────────────────────┘ \\
 
+//Modified to drop IE support and gain percentage unit support (Andres Veidenberg 2012)
+
 (function (glob) {
     var version = "0.4.0",
         has = "hasOwnProperty",

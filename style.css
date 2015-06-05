@@ -1,13 +1,25 @@
-* { margin: 0; padding: 0; }
+/* CSS styling for Wasabi web app. Designed for a modern webkit/firefox borwser. */
+/* Written by Andres Veidenberg //andres.veidenberg{at}helsinki.fi//, University of Helsinki [2011] */
 
 .notransition, .notransition * { /* animations turn-off switch */
   -webkit-transition: none !important;
   transition: none !important;
 }
-	
-body{ 
-	background:url("img/bg_beige2.jpg") repeat scroll left top white;
+
+/* Background */	
+body{
+	background:url("images/bg_beige.jpg") repeat scroll left top white;
 	font: 14px arial, sans-serif;
+}
+
+#page{
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	min-height: 500px;
+	min-width: 850px;
 }
 
 noscript div{
@@ -26,6 +38,72 @@ noscript div img{
 	margin: 0 10px -15px -30px;
 }
 
+#startup{
+	position: relative;
+	margin-top: 25px;
+	left: auto;
+  	text-align: center;
+  	font-size: 42px;
+    color: #ffca71;
+    text-shadow: 0 0 1px #444341;
+}
+
+
+/* Top bar (buttons, menus) */
+#top{
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 90px;
+	-webkit-transform: translateY(0px);
+	transform: translateY(0px);
+	background: url(images/bg_top.jpg) repeat-x bottom left;
+	box-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 -1px 0 0 rgba(255, 255, 255, 0.4) inset;
+	-webkit-transition: height 0.5s, top 0.3s, -webkit-transform 0.5s;
+	transition: height 0.5s, top 0.3s, transform 0.5s;
+	z-index: 50;
+	-moz-user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
+#top.away{
+	-webkit-transform: translateY(-100px);
+	transform: translateY(-100px);
+}
+
+#top, #left, #right {
+	-webkit-touch-callout: none; /* disable zoomglass on touch hold */
+}
+
+/* collapsed/hidden menubar */
+body.mintop #top { height: 50px; }
+body.mintop.hiddentop #top { top: -40px; }
+body.mintop.hiddentop #top.hidden:hover { top: 0; }
+body.mintop #top div.title, body.mintop #top div.toptext, body.mintop #bottom{ opacity: 0; }
+body.mintop #top div.buttonblock{ top: -3px; }
+body.mintop #top #logo{ top: -6px; }
+body.mintop.hiddentop #top #logo{ top: -11px; }
+body.mintop #top div.buttonmenuwrap{ top: 47px; }
+body.mintop #left{ top: 90px; bottom: 28px; }
+body.mintop.hiddentop #left{ top: 46px; }
+body.mintop #namesborderDragline{ top: 70px; }
+body.mintop.hiddentop #namesborderDragline{ top: 30px; }
+body.mintop #right{ top: 60px; bottom: 10px; }
+body.mintop.hiddentop #right{ top: 20px; }
+
+.toptext{
+	position: absolute;
+	top: 45px;
+	width: 100%;
+	color: #333;
+	text-shadow: 0 1px 0 white;
+	text-align: center;
+	cursor: default;
+	white-space: nowrap;
+	transition: opacity 0.5s;
+}
+
 #top div.title{
 	position: absolute;
 	top: 0;
@@ -39,29 +117,26 @@ noscript div img{
 	transition: opacity 0.5s;
 }
 
-#top .bottomarr{
-	position: absolute;
-	bottom: -2px;
-	left: 0;
-	width: 400px;
-	padding: 0;
-	height: 8px;
-	line-height: 5px;
-	color: #666;
-	cursor: pointer;
+#topcollapse{
+	bottom: 7px;
+    color: #666666;
+    cursor: pointer;
+    height: 25px;
+    left: 5px;
+    line-height: 10px;
+    padding-top: 40px;
+    position: absolute;
+    text-align: center;
+    text-shadow: 0 1px 0 white;
+    vertical-align: bottom;
+    width: 30px;
+    z-index: 2;
+}
+#topcollapse>span{
 	opacity: 0;
-	z-index: 2;
-	text-shadow: 0 1px 0 white;
-	-webkit-transition: opacity 0.2s;
-	transition: opacity 0.2s;
+	transition: opacity 0.3s;
 }
-#top .bottomarr span{
-	display: inline-block;
-	position: absolute;
-	top: -4px;
-	left: 3px;
-}
-#top .bottomarr:hover{ opacity: 1; }
+#topcollapse:hover>span{ opacity: 1; }
 
 html body div.opaque{ opacity: 1; }
 
@@ -75,7 +150,7 @@ svg.icon path{
 span.svgicon{
 	display: inline-block;
     padding-right: 5px;
-    vertical-align: -4px;
+    vertical-align: text-bottom;
     width: 18px;
     height: 18px;
 }
@@ -92,6 +167,7 @@ a:hover {
 	text-decoration: underline;
 }
 
+/* BUTTONS */
 a.button {
 	outline: none;
 	cursor: pointer;
@@ -110,13 +186,31 @@ a.button {
     text-shadow: 0 1px 0 rgba(255,255,255,.9);
     border-radius: 18px;
     box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(255,255,255,.6);
-    user-select: none;
+    -ms-user-select: none;
 	-webkit-user-select: none;
 	-moz-user-select: none;
 }
+#top a.button{ padding: 6px 16px; }
+
+a.button:hover {
+    background-color: #fff;
+    background: -webkit-linear-gradient(#fcfcfc, #dcdcdc);
+    background: linear-gradient(#fcfcfc, #dcdcdc);
+    box-shadow: 0 0 3px #bbb;
+}
+#top a.button:hover{
+	box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(255,255,255,.6);
+}
+
+a.button:active{
+    position: relative;
+    top: 1px;
+    background-color: #eee;
+    background: -webkit-linear-gradient(#dadada, #fafafa);
+    background: linear-gradient(#dadada, #fafafa);
+}
 a.button span{ display: inline-block; }
 
-#top a.button{ padding: 6px 16px; }
 
 a.button.square{
 	border-radius: 3px;
@@ -124,6 +218,11 @@ a.button.square{
 }
 #top a.button.square{
 	padding: 5px 9px;
+}
+
+a.button.round{
+	padding: 3px;
+    border-radius: 100%;
 }
 
 a.button.small{
@@ -135,23 +234,68 @@ a.button.red, span.red{ color: red; }
 span.orange{ color: orange; }
 span.green{ color: green; }
 
+a.button.grey{
+	color: white;
+	text-shadow: 0 -1px 0 #555;
+	box-shadow: 0 1px 2px -1px white inset;
+	background: linear-gradient(#BEC0C7, #A0A2A9);
+}
+a.button.grey:hover{
+	background: linear-gradient(#D2D4DB, #AAACB3);
+}
+
+a.button.orange{
+	color: white;
+	text-shadow: 0 -1px 0 #333;
+	box-shadow: 0 1px 2px -1px white inset;
+	background-color: #D07000;
+	background: linear-gradient(#FFA500, #D07000);
+}
+a.button.orange:hover{
+	background-color: #FFCC00;
+	background: linear-gradient(#FFCC00, #E29500);
+}
+
+a.button.blue{
+	color: white;
+	text-shadow: 0 -1px 0 #333;
+	box-shadow: 0 1px 2px -1px white inset;
+	background-color: #1874CD;
+	background: linear-gradient(#4F9EEA, #1874CD);
+}
+a.button.blue:hover{
+	background-color: #7DB7F0;
+	background: linear-gradient(#7DB7F0, #1874CD);
+}
+
+a.button.green{
+	color: white;
+	text-shadow: 0 -1px 0 #333;
+	box-shadow: 0 1px 2px -1px white inset;
+	background-color: #18AD14;
+	background: linear-gradient(#9FEA8E, #18AD14);
+}
+a.button.green:hover{
+	background-color: #28BD24;
+	background: linear-gradient(#AFFAAE, #28BD24);
+}
+
 a.button.disabled{ color: #888; }
 
-a.button:hover {
-    background-color: #dadada;
-    background: -webkit-linear-gradient(#fcfcfc, #dcdcdc);
-    background: linear-gradient(#fcfcfc, #dcdcdc);
-    box-shadow: 0 0 3px #bbb;
+a.button.transparent, #top a.button.transparent{
+	border: none;
+	background: none;
+	box-shadow: none;
 }
-#top a.button:hover{
-	box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(255,255,255,.6);
+#top a.button.transparent:hover{ background: rgba(255,255,255,0.6); }
+
+a.button.icon{
+	border-radius: 5px;
+	padding: 3px;
 }
-a.button:active{
-    position: relative;
-    top: 1px;
-    background-color: #eee;
-    background: -webkit-linear-gradient(#dadada, #fafafa);
-    background: linear-gradient(#dadada, #fafafa);
+#top a.button.icon{ padding: 2px; }
+#top a.button.icon>img {
+	height: 32px;
 }
 
 span.buttongroup{
@@ -228,8 +372,8 @@ span.buttongroup a.button.right{
 	border-left: 2px groove white;
 	border-right: none;
 	border-radius: 0;
-	margin-left: 0;
-	margin-right: 0;
+	margin-left: -4px;
+	margin-right: -4px;
 	padding: 3px;
 	vertical-align: top;
 	text-align: center;
@@ -285,16 +429,17 @@ span.buttongroup a.button.right{
 }
 #statusbtn .nr.green{ background: green; }
 #statusbtn .nr.red{ background: red; }
+#statusbtn .nr.orange{ background: orange; }
 
 #top div.buttonblock{
-	position:absolute;
-	top:20px;
+	position: absolute;
+	top: 23px;
 	-webkit-transition: top 0.5s;
 	transition: top 0.5s;
 }
 
 #logo{
-	right: 150px;
+	right: 20px;
 	cursor: pointer;
 	padding-top: 8px;
 }
@@ -303,8 +448,8 @@ span.buttongroup a.button.right{
 	cursor: pointer;
 	-webkit-transition: opacity ease 0.2s;
 	transition: opacity ease 0.2s;
-	text-align: left;
-	padding-left: 30px;
+	width: auto;
+	right: 130px;
 }
 #logo:hover .toptext{ opacity: 1; }
 
@@ -361,7 +506,7 @@ span.right{
 	right: 5px;
 }
 
-
+/* Top bar slide-out menus */
 #filewrap{
 	text-transform: capitalize;
 	white-space: nowrap;
@@ -375,8 +520,8 @@ div.buttonmenuwrap{
 	white-space: nowrap;
 	overflow: hidden;
 	border-top: 1px solid #888;
-	-webkit-transition: opacity 0.1s ease 0.6s;
-	transition: opacity 0.1s ease 0.6s;
+	-webkit-transition: opacity 0.1s ease 0.3s;
+	transition: opacity 0.1s ease 0.3s;
 	z-index: 70;
 }
 div.buttonmenuwrap.visible{
@@ -408,8 +553,8 @@ div.buttonmenuwrap .buttonmenu{
 	border-bottom-right-radius: 3px;
 	border-bottom-left-radius: 3px;
 	box-shadow: 0 2px 3px -1px #666;
-	-webkit-transition: margin-top 0.7s;
-	transition: margin-top 0.7s;
+	-webkit-transition: margin-top 0.3s;
+	transition: margin-top 0.3s;
 }
 div.buttonmenuwrap div.buttonmenu span.right{
 	margin-top: 3px;
@@ -417,104 +562,53 @@ div.buttonmenuwrap div.buttonmenu span.right{
 	width: 15px;
 	height: 15px;
 }
-div.buttonmenuwrap div.buttonmenu img.right{
-	position: absolute;
-	right: 5px;
-	height: 20px;
-	vertical-align: bottom;
-}
-div.buttonmenuwrap .buttonmenu ul{
+
+div.buttonmenuwrap div.buttonmenu ul{
 	margin: 0;
 	padding: 0;
 }
-div.buttonmenuwrap .buttonmenu ul li{
+div.buttonmenuwrap div.buttonmenu ul li{
 	list-style-type:none;
 	margin: 0;
 	padding: 3px 6px;
 	cursor: pointer;
 	border-top: 1px solid #999;
-	-webkit-transition: background-color 0.3s;
-	transition: background-color 0.3s;
 }
-div.buttonmenuwrap .buttonmenu ul li:hover{
+div.buttonmenuwrap div.buttonmenu ul li:first-child{ border-top: none; }
+div.buttonmenuwrap div.buttonmenu ul li:hover{
 	background-color: #99c5f6;
 }
 
-#page{
+div.buttonmenuwrap div.buttonmenu.righticn ul li{ padding-right: 30px }
+div.buttonmenuwrap div.buttonmenu.righticn img.icn{
 	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	min-height: 600px;
-	min-width: 1000px;
-}
-/* collapsed/hidden menubar */
-body.mintop #top { height: 50px; }
-body.mintop #top.hidden { top: -40px; }
-body.mintop #top.hidden:hover { top: 0; }
-body.mintop #top div.title, body.mintop #top div.toptext, body.mintop #bottom{ opacity: 0; }
-body.mintop #top div.buttonblock{ top: -3px; }
-body.mintop #top #logo{ top: -6px; }
-body.mintop.hiddentop #top #logo{ top: -11px; }
-body.mintop #top div.buttonmenuwrap{ top: 47px; }
-body.mintop #left{ top: 90px; bottom: 28px; }
-body.mintop.hiddentop #left{ top: 50px; }
-body.mintop #namesborderDragline{ top: 70px; }
-body.mintop.hiddentop #namesborderDragline{ top: 30px; }
-body.mintop #right{ top: 60px; bottom: 10px; }
-body.mintop.hiddentop #right{ top: 20px; }
-
-#top{
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	height: 90px;
-	-webkit-transform: translateY(0px);
-	transform: translateY(0px);
-	background: url(img/bg_top.jpg) repeat-x bottom left;
-	box-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 -1px 0 0 rgba(255, 255, 255, 0.4) inset;
-	-webkit-transition: height 0.5s, top 0.3s, -webkit-transform 0.5s;
-	transition: height 0.5s, top 0.3s, transform 0.5s;
-	z-index: 50;
-}
-#top.away{
-	-webkit-transform: translateY(-100px);
-	transform: translateY(-100px);
-}
-.toptext{
-	position: absolute;
-	top: 45px;
-	width: 100%;
-	color: #555;
-	text-shadow: 0 1px 0 white;
-	text-align: center;
-	cursor: default;
-	white-space: nowrap;
-	transition: opacity 0.5s;
+	right: 5px;
 }
 
+
+/* Left pane (tree area) */
 #left {
 	position: absolute;
-	top: 130px;
+	opacity: 0;
+	top: 125px;
 	left: 10px;
 	bottom: 68px;
 	width: 300px;
 	overflow: hidden;
-	-webkit-transition: top 0.5s, bottom 0.5s;
-	transition: top 0.5s, bottom 0.5s;
+	-webkit-transition: top 0.5s, bottom 0.5s, opacity 0.5s;
+	transition: top 0.5s, bottom 0.5s, opacity 0.5s;
 }
 
  #treewrap{
  	position: absolute;
  	display: none;
  	top: 0;
+ 	margin-top: 4px;
  	left: 0;
  	right: 10px;
  	bottom: 15px;
  	background-color: white;
- 	box-shadow: -3px 0 3px -3px rgba(0, 0, 0, 0.6) inset;
+ 	box-shadow: 0 0 10px white;
  }
  
  #tree circle, #names text{
@@ -524,6 +618,10 @@ body.mintop.hiddentop #right{ top: 20px; }
  	cursor: default;
  } 
  
+ #names svg{
+ 	-webkit-transition: font-size 0.5s;
+	transition: font-size 0.5s;
+ }
  #treewrap.minimal #tree circle, #treewrap.minimal #tree line[stroke-dasharray], #treewrap.minimal #names svg{
  	display: none;
  }
@@ -568,14 +666,13 @@ body.mintop.hiddentop #right{ top: 20px; }
   #names{
  	position: absolute;
  	top: 0;
- 	margin-top: 3px;
  	right: 0;
  	width: 80px;
  	height: 100%;
  	border-left: 1px solid white;
  	transition: border-color 0.5s;
  	-webkit-transition: border-color 0.5s;
- 	box-shadow: -1px 0 0 #ccc inset, -2px -2px 3px #ddd inset;
+ 	box-shadow: -1px 0 0 #ccc inset, -4px 0 4px -2px #ccc inset;
  	overflow: hidden;
  	background-color: white;
  	white-space: nowrap;
@@ -617,29 +714,31 @@ body.mintop.hiddentop #right{ top: 20px; }
  	position: absolute;
  	right: 0;
  	top: 30%;
- 	color: #999;
+ 	color: #666;
  	font-size: 20px;
  	height: 200px;
  	width: 10px;
  	line-height: 200px;
  	text-align: center;
+ 	text-shadow: 0 1px 0 white;
  	cursor: move;
  	-moz-user-select: none;
     -webkit-user-select: none;
-    user-select: none;
+    -ms-user-select: none;
+ }
+ #borderDrag:hover{
+ 	background-color: rgba(200,200,200,0.5);
  }
 
 
 #namelabel{
+	display: none;
 	position: absolute;
 	font-family: Verdana;
-	opacity: 0;
 	overflow: hidden;
 	z-index: 25;
 	border-radius: 0 3px 3px 0;
-	box-shadow: 2px 1px 2px rgba(0,0,0,0.4);
-	transition: opacity 0.2s;
-	-webkit-transition: opacity 0.2s;
+	box-shadow: 3px 1px 2px rgba(0,0,0,0.4);
 }
 #namelabel span, #draggedlabel{
 	border-radius: 5px;	
@@ -652,7 +751,7 @@ body.mintop.hiddentop #right{ top: 20px; }
 	position: absolute;
 	font-family: Verdana;
 	box-shadow: 2px 2px 4px #444;
-	z-index: 45;
+	z-index: 60;
 }
 
 #draggedtree{
@@ -660,31 +759,22 @@ body.mintop.hiddentop #right{ top: 20px; }
 	opacity: 0.9;
 	box-shadow: 2px 2px 5px #444;
 	border-radius: 3px;
-	z-index: 45;
-}
-
-
-#right {
-	position: absolute;
-	left: 310px;
-	right: 0;
-	top: 100px;
-	bottom: 50px;
-	-webkit-transition: top 0.5s, bottom 0.5s;
-	transition: top 0.5s, bottom 0.5s;
+	z-index: 60;
 }
 
  #namesborderDragline{
  	position: absolute;
+ 	visibility: hidden;
  	left: 5px;
  	top: 110px;
  	width: 297px;
  	height: 3px;
  	box-shadow: 0 1px 2px #777 inset, 0 1px 0 white;
- 	-webkit-transition: top 0.5s;
- 	transition: top 0.5s;
+ 	-webkit-transition: top 0.5s, opacity 0.5s;
+ 	transition: top 0.5s, opacity 0.5s;
  }
- #namesborderDragline.dragmode{ display: none }
+ #namesborderDragline.visible{ visibility: visible; opacity: 1; }
+ #namesborderDragline.dragmode{ visibility: hidden; opacity: 0; }
  #namesborderDrag{
  	position: absolute;
  	left: 208px;
@@ -694,7 +784,7 @@ body.mintop.hiddentop #right{ top: 20px; }
  	text-align: center;
  	-moz-user-select: none;
     -webkit-user-select: none;
-    user-select: none;
+    -ms-user-select: none;
     border-radius: 3px;
     top: -5px;
  }
@@ -772,6 +862,18 @@ img#rightshadow{
 }
 
 
+/* Right pane (sequence area) */
+#right {
+	position: absolute;
+	opacity: 0;
+	left: 310px;
+	right: 0;
+	top: 100px;
+	bottom: 50px;
+	-webkit-transition: top 0.5s, bottom 0.5s, opacity 0.5s;
+	transition: top 0.5s, bottom 0.5s, opacity 0.5s;
+}
+
 #seqwindow {
 	position: absolute;
 	top: 0;
@@ -784,23 +886,84 @@ img#rightshadow{
 	box-shadow: 0 1px 0 white;
     -moz-user-select: none;
     -webkit-user-select: none;
-    user-select: none;
+    -ms-user-select: none;
 }
+
  #spinner{
  	display: none;
  	position: absolute;
  	opacity: 0;
  	top: 50%;
  	left: 40%;
+ 	-webkit-transition: opacity .3s;
+ 	transition: opacity .3s;
  }
+ #spinner.show{
+ 	display: block;
+ 	opacity: 1;
+ }
+ 
+div.spinnercover{
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	background: white;
+	opacity: 0.9;
+	z-index: 10;
+}
+div.spinnercover>span{
+	position: absolute;
+	width: 100%;
+	top: 30%;
+	text-align: center;
+	font-size: 18px;
+}
+div.spinnercover>span>img{ width: 36px; }
+ 
+span.spinner{
+	display: block;
+	position: relative;
+	height: 18px;
+	width: 18px;
+	margin: 1px;
+	border-radius: 100%;
+	vertical-align: text-bottom;
+}
+span.spinner>img{
+	display: block;
+	position: absolute;
+	width: 28px;
+	height: 28px;
+	top: -5px;
+	left: -5px;
+}
+span.spinner.cancel{
+	cursor: pointer;
+}
+span.spinner.cancel svg.icon>path{
+	fill: #888;
+	stroke: none;
+}
+span.spinner.cancel:hover, a.button:hover span.spinner.cancel{
+	background-color: #888;	
+}
+span.spinner.cancel:hover>img, a.button:hover span.spinner.cancel>img{
+	display: none;
+}
+span.spinner.cancel:hover svg.icon>path, a.button:hover span.spinner.cancel svg.icon>path{
+	fill: white;
+	stroke: none;
+}
+ 
  #wrap {
  	position: absolute;
  	left: 0;
  }
-  #ruler {
+  
+ #ruler {
   	position: relative;
   	margin-top: 3px;
-  	margin-left: 0;
+  	margin-left: -1px;
   	padding: 1px 0;
 	height: 20px;
 	font-weight: bold;
@@ -808,13 +971,19 @@ img#rightshadow{
 	background-image: linear-gradient(#dadada 20%, #efefef 60%, #ffffff 100%);
 	border-top: 1px solid #ccc;
 	border-bottom: 1px solid #aaa;
+	border-left: 1px solid #bbb;
+	border-right: 1px solid #bbb;
+	border-radius: 3px;
 	box-shadow: 0 3px 5px rgba(0,0,0,0.2), 0 1px 1px white inset, 0 -2px 2px #ccc inset;
 	white-space: nowrap;
 	z-index: 1;
 	cursor: move;
+	-moz-user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
   }
   
-    #ruler span{
+    #ruler > span{
     	display: inline-block;
     	margin-top: 1px;
     	padding-left: 2px;
@@ -825,7 +994,8 @@ img#rightshadow{
     	color: #444;
     	text-shadow: 0 1px 0 white;
     }
-    #ruler span span{
+    #ruler > span:first-child{ border-left-color: transparent; }
+    #ruler > span > span{
     	position: relative;
     	padding: 0;
     	margin: 0;
@@ -855,7 +1025,7 @@ img#rightshadow{
 
 #seqwrap {
 	position: relative;
-	padding-top: 5px;
+	padding: 3px 0 5px 0;
 	margin-left: 0;
 	overflow: hidden;
 	background-color: white;
@@ -865,17 +1035,55 @@ img#rightshadow{
 
 #seq div.tile{
 	position: absolute;
-	opacity: 0;
-	-webkit-transition: opacity .3s;
-	transition: opacity .3s;
+	display: none;
 }
 
+span.progressline{
+	display: inline-block;
+	position: relative;
+	text-align: left;
+	background: #ccc;
+	box-shadow: 0 1px 3px #333 inset, 0 1px 0 white;
+    border-radius: 4px;
+    height: 6px;
+    padding: 1px;
+    vertical-align: 2px;
+}
+a.button span.progressline{
+	margin: -2px -10px 12px;
+    width: 80px;
+}
+a.button.square span.progressline{ margin: -1px 0 13px; }
+span.progressline span.bar{
+	display: inline-block;
+    height: 100%;
+	background-color: white;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.6) inset, 0 3px 3px #ccc inset;
+    -webkit-transition: width .5s;
+ 	transition: width .5s; 
+}
+span.progressline span.title{
+	display: block;
+	position: absolute;
+	text-align: center;
+	font-weight: normal;
+	font-size: 14px;
+	color: #888;
+	width: 100%;
+	top: 8px;
+}
+a.button.orange span.progressline span.title{ color: white; }
 
 .draggerline{
 	background: #eee;
     border-radius: 2px;
     box-shadow: 0 1px 3px #333 inset, 0 1px 0 white;
     height: 5px;
+}
+span.draggerline{
+	display: inline-block;
+	position: relative;
 }
 .draggerline.vertical{
 	height: auto;
@@ -945,7 +1153,7 @@ span.draggerline{
   	overflow: hidden;
   	-moz-user-select: none;
     -webkit-user-select: none;
-    user-select: none;
+    -ms-user-select: none;
   }
   .scrollBtn:hover{
   	color: #bbb;
@@ -967,6 +1175,7 @@ span.draggerline{
   	left: -5px;
   }
 
+/* Pop-up tooltips and menus (mouse click) */
 div.tooltip, div.tooltip.black{
 	position: absolute;
 	background-color: rgba(0,0,0,0.87);
@@ -996,6 +1205,11 @@ div.tooltip.beige{
 
 div.tooltip svg.icon path{ fill: white; }
 div.tooltip.white svg.icon path{ fill: #444; }
+
+div.tooltip.topmenu span.svgicon {
+	width: 20px;
+	height: 20px;
+}
 
 div.tooltip.opaque{
 	opacity: 1;
@@ -1057,13 +1271,11 @@ div.tooltip.opaque{
 .tooltip.white.toparrow > .arrow{ box-shadow: -2px -2px 3px -2px #666; border: none; } 
 .tooltip.white.bottomarrow > .arrow{ box-shadow: 2px 2px 3px -2px #666; border: none; }
 
-.tooltip canvas{ vertical-align: -5px; }
-
 .tooltiptitle{
 	position: relative;
 	padding: 1px 5px;
 }
-div.tooltip.greytitle .tooltiptitle{
+div.tooltip.greytitle .tooltiptitle, span.grey{
 	color: #888;
 }
 #treemenu .tooltiptitle{ padding-right: 2px; }
@@ -1097,10 +1309,11 @@ div.tooltip li.arr span.right{
 
 div.tooltipcontentwrap{
 	position: relative;
-	-webkit-transition: height 0.8s cubic-bezier(0.2,1,0.2,1);
-	transition: height 0.8s cubic-bezier(0.2,1,0.2,1);
+	-webkit-transition: height 0.5s cubic-bezier(0.2,1,0.2,1);
+	transition: height 0.5s cubic-bezier(0.2,1,0.2,1);
 }
-div.tooltipcontentwrap.hidden{
+
+#treemenu>div.tooltipcontentwrap{
 	height: 0;
 	overflow: hidden;
 }
@@ -1149,12 +1362,16 @@ div.tooltip.white ul li:hover{
 	background: linear-gradient(#88b2ff,#3e5dff);
 }
 div.tooltip ul li:hover div{ text-shadow: none; }
-div.tooltip ul li:hover svg.icon path, div.tooltip.white ul li div ul li:hover svg.icon path{ fill : white }
-div.tooltip.white ul li:hover div svg.icon path{ fill : #444 }
+div.tooltip ul li:hover svg.icon path, div.tooltip.white ul li div ul li:hover svg.icon path{ fill: white }
+div.tooltip.white ul li:hover div svg.icon path{ fill: #444 } /*submenu*/
+div.tooltip ul>li.active>span.svgicon>svg.icon>path{ fill: orange }
+div.tooltip ul a{ color: orange }
+div.tooltip.topmenu li {
+	font-size: 18px;
+	padding: 2px 5px;
+}
 
-div.tooltip ul a { color: orange; }
-
-
+/* Sequence selections */
 #seq div.selection{
 	position: absolute;
 	background-color: rgba(0,0,0,0.3);
@@ -1164,7 +1381,7 @@ div.tooltip ul a { color: orange; }
 	display: none;
 	opacity: 1;
 	z-index: 2;
-	user-select: none;
+	-ms-user-select: none;
     -moz-user-select: none;
     -webkit-user-select: none;
     cursor: default;
@@ -1211,7 +1428,7 @@ div.tooltip ul a { color: orange; }
 	opacity: 1;
 	z-index: 1;
 	box-shadow: 0 0 3px #666;
-	user-select: none;
+	-ms-user-select: none;
     -moz-user-select: none;
     -webkit-user-select: none;
     border: 1px solid white;
@@ -1264,22 +1481,19 @@ div.tooltip ul a { color: orange; }
 #right div.rowborder{
 	position: absolute;
 	display: none;
-	opacity: 0;
+	opacity: 1;
 	left: 0;
 	width: 100%;
-	border: 1ps solid black;
+	border: 1px solid black;
 	box-shadow: 0 0 5px black;
-	-webkit-transition: opacity .3s;
-	transition: opacity .3s;
+	-webkit-transition: opacity .3s, top .3s linear;
+	transition: opacity .3s, top .3s linear;
+	border: 1px solid transparent;
     z-index: 1;
 }
-#right div.rowborder.opaque{
-	opacity: 1;
-	-webkit-transition: top .4s;
-    transition: top .4s;
-}
 
 
+/* Dialog windows */
 #backfade{
 	position: absolute;
 	width: 100%;
@@ -1289,8 +1503,6 @@ div.tooltip ul a { color: orange; }
 	background: -webkit-radial-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.9));
 	background: -o-radial-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.9));
 	background: radial-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.9));
-	-webkit-transition: opacity .4s;
-    transition: opacity .4s;
 	display: none;
 }
 
@@ -1326,11 +1538,10 @@ div.popupwindow{
 	position: absolute;
 	top: 100px;
 	left: 20%;
-	background: #f0f0f0;
-	box-shadow: 0 5px 15px -3px #000000, 0 0 1px 1px rgba(255, 255, 255, 0.8) inset;
+	background: url("images/noise.png") repeat, #f2f2f2;
+	box-shadow: 0 5px 20px -3px #000000, 0 0 1px 1px rgba(255, 255, 255, 0.8) inset;
 	text-shadow: 0 1px 0 white;
 	border-radius: 5px;
-	white-space: nowrap;
 	z-index: 60;
 }
 div.popupwrap div.popupwindow{
@@ -1345,12 +1556,18 @@ div.popupwindow div.sectiontitle{
 	text-align: center;
 	margin: 10px 0 15px 0;
 }
+div.popupwindow div.sectiontitle.small{
+	margin-bottom: 10px;
+}
 div.popupwindow div.sectiontitle>span{
 	position: relative;
 	top: -10px;
 	background-color: #f0f0f0;
 	padding: 0 10px;
 	font-weight: bold;
+}
+div.popupwindow div.sectiontitle.small>span{
+	font-weight: normal;
 }
 div.popupwindow div.sectiontitle>span.svg{
 	position: absolute;
@@ -1379,36 +1596,57 @@ div.popupwindow div.sectiontext{
 div.side{
 	-webkit-backface-visibility: hidden;
 	backface-visibility: hidden;
-    -webkit-transition: -webkit-transform 0.7s ease-in-out;
-    transition: transform 0.7s ease-in-out;
+    -webkit-transition: -webkit-transform 0.7s ease-in-out, opacity 0.7s ease-in;
+    transition: transform 0.7s ease-in-out, opacity 0.7s ease-in;
 }
 
 div.back{
 	-webkit-transform: rotateY(-180deg);
 	transform: rotateY(-180deg);
 	z-index: 61;
+	opacity: 0;
 }
 div.flipped div.back{
 	-webkit-transform: rotateY(0deg);
 	transform: rotateY(0deg);
 	z-index: 62;
+	opacity: 1;
 }
 
-div.front{ z-index: 62; }
+div.front{
+	z-index: 62;
+	opacity: 1;
+}
 div.finished div.front{ backface-visibility: visible; }
 div.flipped div.front{
 	backface-visibility: hidden;
 	-webkit-transform: rotateY(180deg);
 	transform: rotateY(180deg);
 	z-index: 61;
+	opacity: 0;
 }
 
-img.closebtn{
+span.closebtn{
 	display: block;
-	position: absolute;
-	top: -15px;
-	right: -15px;
-	cursor: pointer;
+    position: absolute;
+    right: -8px;
+    top: -8px;
+    height: 16px;
+    width: 16px;
+    padding: 0;
+	background:#000;
+    border: 2px solid #fff;
+    border-radius: 10px 10px 10px 10px;
+    box-shadow: 0 2px 6px #666;
+    cursor: pointer;
+}
+
+span.closebtn path{
+	fill: white;
+	stroke: none;
+}
+span.closebtn:hover{
+	border-color: orange;
 }
 
 div.windowtitle{
@@ -1421,7 +1659,7 @@ div.windowtitle{
 	text-shadow: 0 1px 1px white;
 	border-top-left-radius: 5px;
 	border-top-right-radius: 5px;
-	background: url("img/bg_top.jpg") repeat-x scroll left center white;
+	background: url("images/bg_top.jpg") repeat-x scroll left center white;
 	cursor: move;
 	border-bottom: 1px solid white;
 	box-shadow: 0 -5px 5px -5px rgba(0, 0, 0, 0.6) inset, 0 1px 0 0 white inset;
@@ -1444,19 +1682,31 @@ div.windowcontent{
 	overflow-x: hidden;
 	-webkit-overflow-scrolling: touch;
 }
+#jobstatus div.windowcontent{ width: 450px; }
+div.windowcontent option{ padding: 0; }
 
-div.windowcontent ul{ margin-left: 20px; }
+div.windowcontent ul{ margin: 0; padding-left: 30px; }
 div.windowcontent ul li{ margin-top: 5px; white-space: nowrap; }
+div.windowcontent ul.wrap li{ white-space: normal; }
 
 div.windowcontent div.btndiv{
 	text-align: center;
 	margin: 10px 0 -10px;
 }
-div.btndiv a.button{ margin: 0 5px; }
+div.windowcontent div.btndiv a.button{
+	margin: 5px;
+	border-radius: 8px;
+	font-weight: normal;
+	letter-spacing: 0.5px;
+}
+div.windowcontent div.btndiv a.button:active{ top: 0 }
 
 div.windowcontent span.cell{
 	display: inline-block;
 	padding: 0 10px 5px 5px;
+}
+div.windowcontent span.camelcase{
+	text-transform:capitalize;
 }
 
 div.filedrag{
@@ -1480,21 +1730,33 @@ div.dragover{
 	border-color: orange;
 }
 
-input{
+input, textarea{
 	width: 60px;
-	font-size: 16px;
+	font: 16px arial, sans-serif;
 	border: 1px solid #999;
 	margin: 0 5px 5px 0;
 	padding-left: 5px;
 	border-radius: 3px;
-	background: white url(img/input_bg.png) top left repeat-x;
+	background: white url(images/input_bg.png) top left repeat-x;
 	box-shadow: 0 1px 0 white;
 	-webkit-transition: all .4s;
 	transition: all .4s;
 }
-input:hover, input.transparent:hover, input:focus, input.transparent:focus, input.hidden:focus{
+input:hover, input.transparent:hover, textarea:hover, input:focus, input.transparent:focus, input.hidden:focus, textarea:focus{
 	border-color: #555;
 	background-color: white;
+}
+select{ margin: 0; }
+
+div.inputdesc{
+	color: #aaa;
+	opacity: 0;
+}
+input:focus+div.inputdesc{ opacity: 1; }
+
+textarea.url{
+	width: 330px;
+	height: 20px;
 }
 
 input.transparent{
@@ -1508,12 +1770,16 @@ input.hidden, input.static, input.faded{
 	box-shadow: none;
 	width: 250px;
 }
+input.hidden{ border-bottom-color: #666; }
+#library input.hidden{ border-bottom-color: transparent; }
+#library input.hidden:focus{ border-bottom-color: #555; }
+
 input.faded, input.hidden:hover{ background: rgba(255,255,255,0.6); }
 #library input.transparent, #library input.hidden{
 	margin: 0;
 	font-size: 14px;
 	height: 18px;
-	padding-left: 3px;
+	padding-left: 0;
 	width: 220px;
 }
 
@@ -1545,23 +1811,6 @@ input.static.editable, #top input.static.editable{
 	color: black;
 }
 
-input.url{
-	width: 300px;
-}
-input.url:focus:invalid {
-    border-color: red;
-}
-input.url:focus:valid {
-    border-color:green;
-}
-
-input.digit{
-	margin-right: 0;
-    padding-left: 0;
-    text-align: center;
-    width: 27px;
-}
-
 input[type="checkbox"]{
 	width: 16px;
 	height: 16px;
@@ -1569,12 +1818,25 @@ input[type="checkbox"]{
 	vertical-align: -2px;
 }
 
+div.numinput input[type="checkbox"]{ margin-left: 0; }
+div.numinput input[type="text"]{ width: 33px; }
+div.windowcontent input[type="text"].num{
+    padding-left: 0;
+    text-align: center;
+    width: 27px;
+}
+input.nogap{ margin-right: 0; }
+
 span.label{
 	cursor: default;
+	border-bottom: 1px dotted #bbb;
+	display: inline-block;
 }
 span.label:hover{
 	color: orange;
+	border-bottom-color: transparent;
 }
+a.button.orange span.label:hover{ color: white; }
 
 a.button.urladd {
 	margin: 0 5px;
@@ -1585,16 +1847,26 @@ a.button.urladd {
     width: 18px;
     color: #444;
     text-align: center;
-    vertical-align: -2px;
+    vertical-align: 5px;
 }
 a.button.urladd:hover {
 	color: black;
 	box-shadow: 0 0 2px #bbb;
 }
 
-span.icon{ margin-left:5px }
+span.action{
+	cursor: pointer;
+	color: #369;
+}
+span.action:hover{ color: orange; }
+span.icon{
+	margin-left:5px;
+	color: #666;
+}
+
 
 img.icn{ height: 20px; vertical-align: bottom; }
+a.button img.icn{ vertical-align: text-bottom; }
 img.small{ height: 16px; }
 img.icn.action{ cursor: pointer; }
 img.icn.action:hover{ box-shadow: 0 1px 2px #999 inset; }
@@ -1624,30 +1896,42 @@ img.optadd,.rotateable{
 	transform: rotate(90deg);
 }
 
-/* item boxes inside windows */
+/* boxes for items inside dialog windows (library etc.) */
 div.insidediv{
+	position: relative;
 	padding: 10px 10px 5px 10px;
 	margin: 5px 0 -10px;
+	overflow: hidden;
 	border: 1px solid white;
 	border-radius: 3px;
 	box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.4) inset, 0 -4px 3px -4px rgba(0, 0, 0, 0.4) inset;
 }
-
-div.insidediv div.row{ padding: 10px 5px 5px; margin-bottom: 5px; }
-div.insidediv div.row.btnrow{ padding-right: 75px; }
-div.insidediv div.row.bottombtn{ padding-bottom: 10px; }
-div.insidediv div.row:nth-child(odd){ background-color: rgba(255,255,255,0.6); }
-div.insidediv div.row>a.button, div.insidediv div.row>div>a.button{
-	position: absolute;
-	right: 15px;
-	margin-top: -3px;
-    padding: 2px 6px 1px 6px;
+#library div.insidediv{ padding: 5px; }
+/* settings list */
+div.insidediv div.row{
+	position: relative;
+	padding: 10px 5px 5px;
+	margin-bottom: 5px;
+	white-space: nowrap;
 }
+div.insidediv div.row.bottombtn{ padding-bottom: 10px; }
+div.insidediv div.row:nth-child(odd), div.insidediv div.rowwrap>div.row:nth-child(even){ background-color: rgba(255,255,255,0.6); }
+div.insidediv div.rowwrap>div.row:nth-child(odd){ background-color: transparent; }
+div.insidediv a.button.toggle{
+	position: absolute;
+	right: 3px;
+	margin-top: -5px;
+    padding: 2px 6px 1px 6px;
+    border-radius: 3px;
+    top: auto;
+}
+div.insidediv div.row.bottombtn a.button.toggle{ margin-top: -4px;}
 div.insidediv div.row>span.buttongroup{ margin: -10px 0 0 5px; }
-div.insidediv div.row a.button:active{ top: auto; }
-div.insidediv div.row span.note{
-	padding-top: 5px;
-	color: #999;
+div.rowwrap{
+	position: relative;
+	height: 34px;
+	margin-top: 3px;
+	overflow: hidden;
 }
 
 div.insidediv.logdiv{
@@ -1660,27 +1944,43 @@ div.insidediv.logdiv{
 	display: none;
 }
 /* file directory list */
-div.insidediv.logdiv div.row{ padding: 2px 5px; }
-/*div.insidediv.logdiv div.row:nth-child(odd){ background-color: rgba(255,255,255,0.5); }*/
-div.insidediv.logdiv div.row a.button{
-	right: 35px;
+div.logdiv div.row{
+	padding: 3px 5px;
+	margin: 0;
+}
+div.logdiv div.row a.button{
+	position: absolute;
+	right: 5px;
 	padding: 1px 6px;
 	border-radius: 3px;
+	margin: -3px 0 0 0;
+	z-index: 5;
 }
-/*div.insidediv.logdiv div.row a.button:active{ top:auto; }*/
-div.insidediv.logdiv div.row span.note{
+div.logdiv div.row span.note{
 	padding-left: 10px;
 	color: #aaa;
 	font-weight: bold;
 }
-div.insidediv.logdiv a.button, div.insidediv.logdiv span.note{ opacity: 0; }
-div.insidediv.logdiv div.row:hover a.button, div.insidediv.logdiv div.row:hover span.note{ opacity: 1; }
+div.logdiv a.button, div.logdiv span.note, div.logdiv span.share{ opacity: 0; }
+div.logdiv div.row:hover a.button, div.logdiv div.row:hover span.note, div.logdiv div.row:hover span.share{ opacity: 1; }
 
 #jobstatus div.insidediv{
 	margin-bottom: 10px;
 }
+#jobstatus span.importtick{
+	position: absolute;
+	right: 15px;
+	bottom: 10px;
+}
+#jobstatus a.button.square{ vertical-align: top; }
 
-hr{ color:white; box-shadow:0 2px 6px #ddd; margin:5px 0; }
+hr{
+	color:white;
+	box-shadow:0 2px 6px #ddd;
+	margin:5px 0;
+}
+div.insidediv hr:last-child{ display: none; }
+#library div.compact + hr { margin: 2px 0; }
 
 /* items in libary/jobs list */
 div.itemdiv{
@@ -1688,73 +1988,118 @@ div.itemdiv{
 	min-width: 330px;
 	min-height: 40px;
 	overflow: hidden;
-	-webkit-transition: height 0.4s;
-	transition: height 0.4s;
+	-webkit-transition: height 0.4s, border-color 0.3s, background-color 0.3s;
+	transition: height 0.4s, border-color 0.3s, background-color 0.3s;
 }
 #library div.itemdiv{
-	height: 65px;
-	padding: 5px 0 0 5px;
+	height: 55px;
+	padding: 5px 0 0 12px;
 	min-width: 370px;
+	border: 2px solid transparent;
+	border-radius: 3px;
 }
-div.itemdiv.activeitem{
-	background-color: white;
+#library .activeitem{
+	background: white;
 	box-shadow: 0 0 5px #999;
 	border-radius: 3px;
 }
-div.itemdiv a.button.activeitem{
-	background: white;
-	box-shadow: 0 0 5px #999;
+#library div.itemdiv.shared{
+	border-color: #8DB8C6;
+	border-style: dashed;
+}
+#library div.itemdiv.compact{
+	min-height: 24px;
+	height: 24px;
+}
+#library div.itemdiv.draghover{
+	border-color: orange;
+	background-color: rgba(255,165,0,0.4);
+}
+#library div.itemdiv.ui-draggable-dragging{
+	box-shadow: 0 3px 5px #666;
+	background-color: #fff;
+}
+#library div.itemdiv.ui-draggable-dragging div.draghandle{ border-color: transparent; }
+
+div.itemdiv div.draghandle{
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 30px;
+	border-radius: 3px 0 0 3px;
+	background: transparent;
+	cursor: pointer;
+	border: 1px solid transparent;
+	border-right: none;
+    transition: border-color 0.2s linear;
+    -webkit-transition: border-color 0.2s linear;
+}
+div.itemdiv div.draghandle:hover{
+	background: -webkit-linear-gradient(left, rgb(255,255,255), rgba(255,255,255,0));
+	background: linear-gradient(to right, rgb(255,255,255), rgba(255,255,255,0));
+	border-color: #ccc;
+}
+div.itemdiv div.draghandle>span{
+	display: block;
+	position: absolute;
+	top: 50%;
+	height: 18px;
+	width: 18px;
+	text-align: left;
+	padding-left: 2px;
+	font-size: 18px;
+	margin-top: -12px;
+	color: #888;
 }
 
-div.insidediv > hr:last-child{ display: none; }
 div.itemdiv a.button.itembtn{
 	position: absolute;
 	margin: 0;
 	right: 15px;
 	top: 25%;
 }
-
 #library div.itemdiv a.button.itembtn{
 	top: 8px;
 	right: 5px;
 }
-
-#library div.itemdiv a.button.removebtn{
+#library div.itemdiv.compact a.button.itembtn{
+	border-radius: 3px;
+	top: 2px;
+	right: 2px;
+	padding: 2px 6px;
+}
+#library div.itemdiv a.button.itembtn.removebtn{
 	border-radius: 3px;
     color: red;
     padding: 3px 8px;
-    right: 20px;
-    top: 60px;
+    right: 5px;
+    top: 65px;
 }
-
-#library div.itemdiv a.button.childbtn{
+#library div.itemdiv a.button.itembtn.movebtn{
+	border-radius: 3px;
+    padding: 3px 8px;
+    right: 85px;
+    top: 65px;
+}
+#library div.itemdiv a.button.itembtn.childbtn{
 	border-radius: 3px;
     padding: 3px 5px 3px 3px;
-    left: 220px;
+    left: 215px;
     right: auto;
     top: 28px;
 }
-/* 'back to parent' button */
-#library span.dirtrail{
-	display: inline-block;
-	max-width: 260px;
-	overflow: hidden;
-	font-weight: bold;
-	margin-left: 4px;
-	color: #666;
-}
-#library span.dirtrail a.button.small{
-	margin: 6px 3px 3px 3px;
-	font-size: 15px;
+#library div.itemdiv.compact a.button.itembtn.childbtn{
+    padding: 1px 5px 1px 3px;
+    top: 3px;
 }
 
 div.itemdiv a.button span.svg{
 	display: inline-block;
 	width: 20px;
 	height: 20px;
-	vertical-align: -4px;
+	vertical-align: text-bottom;
 }
-
 div.itemdiv a.button svg path{
 	fill: white;
 	stroke: black;
@@ -1769,31 +2114,71 @@ span.note{
 	color: #666;
 	cursor: default;
 }
+#library div.compact span.note:first-child{ display: none; }
 div.tooltip span.note{ color: #ccc; }
 
-span.actiontxt{
-	display: inline-block;
-	cursor: pointer;
-	color: #369;
-	-webkit-transition: color 0.2s;
-	transition: color 0.2s;
-}
-span.actiontxt:hover{ color: orange; }
 span.itemexpand{
 	position: absolute;
 	right: 15px;
-	bottom: -2px;
+	bottom: 0;
 	color: #666;
 }
-/* fading-end textline */
-span.logline{
+#library div.compact span.itemexpand{
+	width: 15px;
+	right: 80px;
+	bottom: 5px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+/* library path header */
+#library a.back{
+	position: absolute;
+	left: 5px;
+    top: 1px;
+    margin: 0;
+    z-index: 1;
+}
+#library span.svgicon{
+	padding-right: 0;
+}
+#library span.svgicon.share{
+	position: absolute;
+	right: 125px;
+	cursor: pointer;
+}
+#library div.itemdiv span.svgicon.share{
+	right: 98px;
+	top: 41px;
+}
+#library div.itemdiv.compact span.svgicon.share{ top: 6px; }
+
+span.svgicon.share path{ fill: #369; }
+a.button span.svgicon path{ fill: #333; }
+span.svgicon.action{ cursor: pointer; }
+span.svgicon.share:hover path, span.svgicon.action:hover path, a.button:hover span.svgicon path{ fill: orange; }
+
+#library span.dirtrail{
 	display: inline-block;
 	position: relative;
-	max-width:300px;
+	margin-left: 15px;
+	margin-right: 145px;
+	max-width: 245px;
+	overflow: hidden;
+	font-weight: bold;
+	color: #666;
+	white-space: nowrap;
+}
+#library span.dirtrail>span.text{
+	float: right;
+	margin-left: 10px;
+}
+
+/* fading-end textline */
+span.logline{
 	margin-right: 10px;
 	white-space:nowrap;
 	overflow:hidden;
-	vertical-align: -4px;
 }
 span>span.fade{
 	display: inline-block;
@@ -1809,6 +2194,16 @@ span>span.fade{
 div.activeitem span>span.fade{
 	background: -webkit-linear-gradient(left, rgba(255,255,255,0), rgb(255,255,255));
 	background: linear-gradient(to right, rgba(255,255,255,0), rgb(255,255,255));
+}
+span>span.leftfade{
+	display: inline-block;
+	position: absolute;
+  	top: 0;
+  	left: 0;
+  	width: 15px;
+  	height: 100%;
+	background: -webkit-linear-gradient(left, rgb(240,240,240), rgba(240,240,240,0));
+	background: linear-gradient(to right, rgb(240,240,240), rgba(240,240,240,0));
 }
 /* file contents paper in exportwindow */
 div.paper{
@@ -1828,8 +2223,13 @@ div.paper{
 	margin: 10px 0 0 10px;
 }
 #about a.logo img{
-	display: inline-block;
-	height: 100px;
+	background: rgba(255, 255, 255, 0.7);
+    border: 1px solid #AAAAAA;
+    border-radius: 3px;
+    display: inline-block;
+    height: 50px;
+    margin: 3px;
+    padding: 5px;
 }
 
 #bottom{
